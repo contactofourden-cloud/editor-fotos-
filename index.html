@@ -1,0 +1,2603 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOURDEN · Mosaico Ortodóncico v9</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  :root {
+    --bg: #0f1117; --surface: #181c27; --surface2: #1e2333;
+    --border: #2a3050; --accent: #4f8ef7; --accent2: #7c5cbf;
+    --text: #e8eaf0; --text2: #8b93b0;
+    --green: #3ecf8e; --red: #f25f5c; --yellow: #f7c948;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 22px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .logo-area { display: flex; align-items: center; gap: 12px; }
+  .logo-box { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1px; background-size: contain; background-repeat: no-repeat; background-position: center; }
+  .app-title { font-size: 14px; font-weight: 600; }
+  .app-sub { font-size: 11px; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .steps-nav { display: flex; gap: 6px; align-items: center; }
+  .step-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 12px; font-family: inherit; cursor: pointer; }
+  .step-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .help-btn { background: none; border: 1px solid var(--border); color: var(--text2); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .help-btn:hover { color: var(--accent); border-color: var(--accent); }
+  main { display: flex; height: calc(100vh - 59px); }
+  .left-panel { width: 290px; min-width: 270px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .panel-section { padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  .panel-title { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; color: var(--text2); text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+  .panel-info { font-size: 10.5px; color: var(--text2); margin-top: 6px; line-height: 1.4; padding: 6px 8px; background: var(--surface2); border-radius: 5px; border-left: 2px solid var(--accent); }
+  .form-group { margin-bottom: 8px; }
+  .form-group label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 3px; }
+  .form-group input { width: 100%; padding: 6px 9px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12.5px; font-family: inherit; outline: none; }
+  .form-group input:focus { border-color: var(--accent); }
+  .pack-label { font-size: 9px; font-weight: 600; color: var(--accent); letter-spacing: 1px; margin: 10px 0 5px; display: flex; justify-content: space-between; align-items: center; }
+  .photo-list { display: flex; flex-direction: column; gap: 3px; }
+  .photo-slot { display: flex; align-items: center; gap: 7px; padding: 6px 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); cursor: pointer; transition: border-color .1s; position: relative; }
+  .photo-slot:hover { border-color: var(--accent); }
+  .photo-slot.selected { border-color: var(--accent); background: rgba(79,142,247,.1); }
+  .photo-slot.loaded { border-left: 3px solid var(--green); }
+  .photo-slot.pack-master { border-left: 3px solid var(--yellow); }
+  .photo-slot.color-ref::before { content: '🎨'; position: absolute; top: 3px; right: 38px; font-size: 10px; }
+  .slot-thumb { width: 34px; height: 26px; border-radius: 4px; background: var(--border); flex-shrink: 0; overflow: hidden; }
+  .slot-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .slot-thumb-empty { width: 34px; height: 26px; border-radius: 4px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+  .slot-info { flex: 1; min-width: 0; }
+  .slot-name { font-size: 10.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slot-tag { font-size: 8.5px; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .slot-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+  .slot-badge.ok { background: rgba(62,207,142,.15); color: var(--green); }
+  .slot-badge.empty { background: var(--border); color: var(--text2); }
+  .slot-badge.master { background: rgba(247,201,72,.2); color: var(--yellow); }
+  .add-extra-btn { margin-top: 10px; width: 100%; padding: 7px; background: transparent; border: 1px dashed var(--border); border-radius: 6px; color: var(--text2); font-size: 11px; cursor: pointer; font-family: inherit; }
+  .add-extra-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .color-controls { display: flex; flex-direction: column; gap: 6px; }
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  .slider-row label { font-size: 11px; color: var(--text2); width: 60px; flex-shrink: 0; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); height: 3px; }
+  .slider-row span { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text); width: 38px; text-align: right; }
+  .apply-color-btn { padding: 7px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-size: 12px; cursor: pointer; font-family: inherit; font-weight: 500; }
+  .apply-color-btn.sec { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+  .logo-upload-area { border: 1px dashed var(--border); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; }
+  .logo-upload-area:hover { border-color: var(--accent); }
+  .logo-upload-area p { font-size: 11px; color: var(--text2); margin-top: 4px; }
+  #logo-preview { max-width: 100%; max-height: 50px; margin-top: 6px; border-radius: 4px; }
+  .action-btns { padding: 13px; display: flex; flex-direction: column; gap: 6px; }
+  .btn-primary { padding: 10px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; border-radius: 7px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-secondary { padding: 8px; background: transparent; border: 1px solid var(--border); border-radius: 7px; color: var(--text2); font-size: 11.5px; cursor: pointer; font-family: inherit; }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .center-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .center-toolbar { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; flex-wrap: wrap; }
+  .tool-btn { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 4px; }
+  .tool-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tool-btn.active { background: rgba(79,142,247,.15); border-color: var(--accent); color: var(--accent); }
+  .tool-sep { width: 1px; height: 20px; background: var(--border); }
+  .center-label { font-size: 12px; color: var(--text); font-weight: 500; }
+  .center-label-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(79,142,247,.15); color: var(--accent); font-family: 'DM Mono', monospace; margin-left: 6px; }
+  .pack-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: rgba(247,201,72,.15); color: var(--yellow); font-family: 'DM Mono', monospace; margin-left: 4px; }
+  .fine-rotation { display: flex; align-items: center; gap: 6px; padding: 0 8px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); height: 28px; }
+  .fine-rotation label { font-size: 10px; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .fine-rotation input { width: 90px; accent-color: var(--yellow); }
+  .fine-rotation .val { font-size: 10px; color: var(--yellow); font-family: 'DM Mono', monospace; min-width: 32px; text-align: right; }
+  .fine-rotation .reset { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 11px; padding: 0 4px; }
+  .canvas-wrapper { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 14px; }
+  #crop-section { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+  #crop-section.visible { display: flex; }
+  .crop-empty { text-align: center; color: var(--text2); padding: 60px 20px; }
+  .crop-empty .icon { font-size: 36px; margin-bottom: 10px; }
+  .crop-container { position: relative; display: inline-block; border-radius: 8px; background: #000; user-select: none; touch-action: none; }
+  #crop-img { display: block; max-width: 850px; max-height: 540px; object-fit: contain; border-radius: 6px; }
+  .crop-box { position: absolute; border: 2px solid var(--accent); cursor: move; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); }
+  .crop-box::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(to right, transparent 33.3%, rgba(255,255,255,.25) 33.3%, rgba(255,255,255,.25) 33.5%, transparent 33.5%, transparent 66.6%, rgba(255,255,255,.25) 66.6%, rgba(255,255,255,.25) 66.8%, transparent 66.8%), linear-gradient(to bottom, transparent 33.3%, rgba(255,255,255,.25) 33.3%, rgba(255,255,255,.25) 33.5%, transparent 33.5%, transparent 66.6%, rgba(255,255,255,.25) 66.6%, rgba(255,255,255,.25) 66.8%, transparent 66.8%); pointer-events: none; }
+  .crop-handle { position: absolute; width: 14px; height: 14px; background: var(--accent); border: 2px solid #fff; border-radius: 50%; z-index: 10; }
+  .crop-handle.tl { top: -7px; left: -7px; cursor: nwse-resize; }
+  .crop-handle.tr { top: -7px; right: -7px; cursor: nesw-resize; }
+  .crop-handle.bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
+  .crop-handle.br { bottom: -7px; right: -7px; cursor: nwse-resize; }
+  .guide-line { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed var(--yellow); pointer-events: auto; cursor: ns-resize; z-index: 20; }
+  .guide-line::before { content: 'PLANO OCLUSAL'; position: absolute; right: 0; top: -16px; background: var(--yellow); color: #000; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; font-weight: 600; }
+  .guide-vertical { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--accent); pointer-events: auto; cursor: ew-resize; z-index: 20; }
+  .guide-vertical::before { content: 'LÍNEA MEDIA'; position: absolute; bottom: 0; left: 4px; background: var(--accent); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; font-weight: 600; }
+  .crop-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .crop-action-btn { padding: 7px 13px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; }
+  .crop-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .crop-action-btn.confirm { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; color: #fff; font-weight: 600; }
+  .crop-action-btn.warn { background: var(--yellow); color: #000; border: none; font-weight: 600; }
+  .crop-action-btn.danger { background: var(--red); color: #fff; border: none; font-weight: 600; }
+  .help-tip { font-size: 10.5px; color: var(--text2); margin-top: 4px; line-height: 1.4; max-width: 700px; text-align: center; }
+  .pack-banner { padding: 6px 12px; background: rgba(247,201,72,.1); border: 1px solid var(--yellow); border-radius: 6px; color: var(--yellow); font-size: 11px; font-weight: 500; display: flex; align-items: center; gap: 6px; max-width: 700px; }
+  #color-section { display: none; flex-direction: column; width: 100%; height: 100%; padding: 0; }
+  #color-section.visible { display: flex; }
+  .color-tabs { display: flex; gap: 0; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; overflow-x: auto; }
+  .color-tab { padding: 12px 16px; background: transparent; border: none; color: var(--text2); font-size: 12px; cursor: pointer; font-family: inherit; border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .color-tab:hover { color: var(--text); }
+  .color-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .color-tab .count { font-size: 9px; padding: 1px 5px; background: var(--border); border-radius: 8px; color: var(--text2); }
+  .color-tab.active .count { background: var(--accent); color: #fff; }
+  .color-top-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 14px; flex-shrink: 0; }
+  .color-top-info-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .color-toolbar-info { font-size: 11px; color: var(--text2); }
+  .color-toolbar-info b { color: var(--text); }
+  .selection-count { padding: 3px 9px; background: rgba(79,142,247,.15); color: var(--accent); border-radius: 12px; font-size: 11px; font-family: 'DM Mono', monospace; font-weight: 600; }
+  .color-sliders-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .color-slider-group { display: flex; flex-direction: column; gap: 3px; min-width: 130px; flex: 1; }
+  .color-slider-group label { font-size: 10px; color: var(--text2); display: flex; justify-content: space-between; }
+  .color-slider-group label span { color: var(--accent); font-family: 'DM Mono', monospace; font-weight: 600; }
+  .color-slider-group input[type=range] { accent-color: var(--accent); height: 4px; }
+  .color-slider-group input[type=range]:disabled { accent-color: var(--border); opacity: .5; }
+  .color-actions-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .color-grid-area { flex: 1; overflow: auto; padding: 16px; background: var(--bg); }
+  .color-grid { display: grid; gap: 12px; max-width: 1600px; margin: 0 auto; }
+  .color-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .color-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .color-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .color-card { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer; position: relative; }
+  .color-card:hover { border-color: var(--accent); }
+  .color-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,142,247,.25); }
+  .color-card.is-ref { border-color: var(--yellow); }
+  .color-card.is-ref::before { content: '🎨 REFERENCIA'; position: absolute; top: 6px; left: 6px; background: var(--yellow); color: #000; font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 4px; z-index: 3; font-family: 'DM Mono', monospace; }
+  .color-card.selected::after { content: '✓'; position: absolute; top: 6px; right: 6px; background: var(--accent); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; z-index: 3; }
+  .color-card-img-wrap { position: relative; aspect-ratio: 4/3; background: #000; overflow: hidden; }
+  .color-card-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .color-card-info { padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .color-card-name { font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .color-card-vals { font-size: 9px; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .color-card-actions { display: flex; gap: 4px; }
+  .card-mini-btn { padding: 3px 7px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 10px; cursor: pointer; font-family: inherit; }
+  .card-mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .card-mini-btn.ref-btn { background: var(--yellow); color: #000; border: none; font-weight: 600; }
+  .card-mini-btn.reset-btn:hover { border-color: var(--red); color: var(--red); }
+  .compare-toggle { position: absolute; top: 6px; right: 32px; padding: 3px 7px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 4px; font-size: 9px; cursor: pointer; font-family: inherit; z-index: 4; opacity: 0; }
+  .color-card:hover .compare-toggle { opacity: 1; }
+  .color-card.show-original .color-card-img { filter: none !important; }
+  .color-card.show-original .color-card-img-wrap::after { content: 'ORIGINAL'; position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: var(--red); color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .color-empty { text-align: center; padding: 60px 20px; color: var(--text2); }
+  .color-empty .icon { font-size: 40px; margin-bottom: 10px; }
+  #mosaic-section { display: none; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+  #mosaic-section.visible { display: flex; }
+  .mosaic-canvas-wrap { position: relative; box-shadow: 0 8px 40px rgba(0,0,0,.4); }
+  #mosaic-canvas-el { display: block; background: #fff; max-width: 100%; max-height: 75vh; border: 1px solid var(--border); }
+  .mosaic-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .photo-handle-overlay { position: absolute; pointer-events: auto; cursor: move; border: 2px solid transparent; }
+  .photo-handle-overlay:hover, .photo-handle-overlay.editing { border-color: var(--accent); background: rgba(79,142,247,.1); }
+  .photo-handle-overlay::after { content: '✥ Mover'; position: absolute; top: 4px; left: 4px; background: var(--accent); color: #fff; font-size: 9px; padding: 2px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; opacity: 0; }
+  .photo-handle-overlay:hover::after { opacity: 1; }
+  .mos-handle { position: absolute; width: 14px; height: 14px; background: var(--yellow); border: 2px solid #fff; border-radius: 50%; opacity: 0; transition: opacity .1s; z-index: 5; box-shadow: 0 0 4px rgba(0,0,0,.4); }
+  .photo-handle-overlay:hover .mos-handle, .photo-handle-overlay.editing .mos-handle { opacity: 1; }
+  .mos-handle-tl { top: -7px; left: -7px; cursor: nwse-resize; }
+  .mos-handle-tr { top: -7px; right: -7px; cursor: nesw-resize; }
+  .mos-handle-bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
+  .mos-handle-br { bottom: -7px; right: -7px; cursor: nwse-resize; }
+  .right-panel { width: 200px; min-width: 180px; background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; }
+  .right-panel-title { padding: 11px 14px; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; color: var(--text2); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  .cropped-list { padding: 9px; display: flex; flex-direction: column; gap: 6px; }
+  .cropped-item { border-radius: 6px; border: 1px solid var(--border); overflow: hidden; background: var(--surface2); }
+  .cropped-item img { width: 100%; display: block; }
+  .cropped-item-label { padding: 4px 6px; font-size: 9px; color: var(--text2); font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+  .modal-bg.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 540px; width: 100%; max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+  .modal p { font-size: 13px; color: var(--text2); margin-bottom: 14px; line-height: 1.5; }
+  .modal p b { color: var(--text); }
+  .modal-preview { display: flex; gap: 14px; margin: 14px 0; align-items: center; justify-content: center; }
+  .modal-preview img { max-width: 260px; max-height: 260px; border: 2px solid var(--accent); border-radius: 6px; background: #000; }
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 12px; }
+  .modal-help-section { background: var(--surface2); border-radius: 8px; padding: 12px; margin: 8px 0; }
+  .modal-help-section h4 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
+  .modal-help-section p { font-size: 12px; margin: 0 0 8px; }
+  .transform-mini-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
+  .transform-mini-btns button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 11px; cursor: pointer; font-family: inherit; }
+  .transform-mini-btns button:hover { border-color: var(--accent); color: var(--accent); }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; opacity: 0; transform: translateY(10px); transition: all .3s; z-index: 999; pointer-events: none; max-width: 350px; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error { border-color: var(--red); color: var(--red); }
+  #toast.info { border-color: var(--accent); color: var(--accent); }
+  input[type=file] { display: none; }
+  .saved-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+  .saved-card:hover { border-color: var(--accent); }
+  .saved-card-info { flex: 1; min-width: 0; }
+  .saved-card-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .saved-card-meta { font-size: 10px; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .saved-card-count { font-size: 10px; padding: 2px 7px; background: rgba(62,207,142,.15); color: var(--green); border-radius: 10px; }
+  .saved-card-del { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 11px; cursor: pointer; flex-shrink: 0; }
+  .saved-card-del:hover { border-color: var(--red); color: var(--red); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-area">
+    <div class="logo-box" id="header-logo">FD</div>
+    <div>
+      <div class="app-title">FOURDEN · Mosaico Ortodóncico</div>
+      <div class="app-sub">v9 · Guardar/Cargar · ZIP email</div>
+    </div>
+  </div>
+  <div class="steps-nav">
+    <button class="help-btn" onclick="showHelp()" title="Ayuda">?</button>
+    <button class="step-btn active" id="btn-step-crop" onclick="switchView('crop')">① Recorte</button>
+    <button class="step-btn" id="btn-step-color" onclick="switchView('color')">② Color</button>
+    <button class="step-btn" id="btn-step-mosaic" onclick="switchView('mosaic')">③ Mosaico</button>
+  </div>
+</header>
+
+<main>
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-title">Datos del paciente</div>
+      <div class="form-group"><label>Nombre completo</label><input type="text" id="patient-name" placeholder="Apellido, Nombre"></div>
+      <div class="form-group"><label>Fecha de nacimiento</label><input type="date" id="patient-dob"></div>
+      <div class="form-group"><label>Fecha de exploración</label><input type="date" id="patient-date"></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-title">Logo clínica</div>
+      <div class="logo-upload-area" onclick="document.getElementById('logo-input').click()">
+        <img id="logo-preview" style="display:none">
+        <p style="margin-top:4px">Click para cambiar</p>
+      </div>
+      <input type="file" id="logo-input" accept="image/png,image/jpeg" onchange="loadLogo(this)">
+    </div>
+
+    <div class="panel-section" id="crop-color-panel">
+      <div class="panel-title">Color foto actual</div>
+      <div class="color-controls">
+        <div class="slider-row"><label>Brillo</label><input type="range" id="s-brightness" min="50" max="150" value="100" oninput="updateSliderVal('brightness'); livePreview()"><span id="v-brightness">100</span></div>
+        <div class="slider-row"><label>Contraste</label><input type="range" id="s-contrast" min="50" max="150" value="100" oninput="updateSliderVal('contrast'); livePreview()"><span id="v-contrast">100</span></div>
+        <div class="slider-row"><label>Saturac.</label><input type="range" id="s-saturation" min="50" max="150" value="100" oninput="updateSliderVal('saturation'); livePreview()"><span id="v-saturation">100</span></div>
+        <div class="slider-row"><label>Temp.</label><input type="range" id="s-warmth" min="-30" max="30" value="0" oninput="updateSliderVal('warmth'); livePreview()"><span id="v-warmth">0</span></div>
+        <button class="apply-color-btn" onclick="applyColorToSelected()">Aplicar a esta</button>
+        <button class="apply-color-btn" style="background: linear-gradient(135deg, #3ecf8e, #10b981); color: #fff; margin-top: 4px;" onclick="autoImproveCurrentPhoto()">✨ Auto-mejora esta foto</button>
+      </div>
+      <div class="panel-info">Auto-mejora normaliza brillo y contraste. Para igualar varias fotos → paso <b>② Color</b>.</div>
+    </div>
+
+    <div class="panel-section" style="flex:1">
+      <div class="panel-title">Fotos del set (14 + 3 extras)</div>
+      <div id="photo-list-container"></div>
+      <button class="add-extra-btn" onclick="addExtraSlot()">+ Foto extra</button>
+    </div>
+
+    <div class="action-btns">
+      <button class="btn-primary" onclick="switchView('mosaic')">🗂 Generar Mosaico A4</button>
+      <button class="btn-secondary" onclick="downloadAllCropped()">📦 Descargar ZIP (fotos + mosaico)</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-secondary" style="flex:1" onclick="saveSessionFile()">💾 Guardar sesión</button>
+        <button class="btn-secondary" style="flex:1" onclick="document.getElementById('load-session-input').click()">📂 Cargar sesión</button>
+      </div>
+      <button class="btn-secondary" onclick="newSession()">🆕 Nuevo paciente</button>
+      <input type="file" id="load-session-input" accept=".fourden,.json" onchange="loadSessionFile(this)" style="display:none">
+    </div>
+  </div>
+
+  <div class="center-area">
+    <div class="center-toolbar" id="crop-toolbar">
+      <span class="center-label" id="current-slot-label">Selecciona una foto</span>
+      <span class="center-label-tag" id="current-slot-ratio" style="display:none">3:4</span>
+      <span class="pack-tag" id="current-pack-tag" style="display:none">PACK</span>
+      <div style="flex:1"></div>
+      <button class="tool-btn" onclick="rotateCrop(-90)">↺ -90°</button>
+      <button class="tool-btn" onclick="rotateCrop(90)">↻ +90°</button>
+      <button class="tool-btn" onclick="rotateCrop(180)">↻ 180°</button>
+      <div class="fine-rotation">
+        <label>Enderezar</label>
+        <input type="range" id="s-rotate-fine" min="-10" max="10" step="0.5" value="0" oninput="updateFineRotation()">
+        <span class="val" id="v-rotate-fine">0°</span>
+        <button class="reset" onclick="resetFineRotation()">⟲</button>
+      </div>
+      <button class="tool-btn" onclick="flipH()" id="btn-flip-h">⇄ H</button>
+      <button class="tool-btn" onclick="flipV()" id="btn-flip-v">⇅ V</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" id="btn-guide-h" onclick="toggleGuideH()">─ Plano</button>
+      <button class="tool-btn" id="btn-guide-v" onclick="toggleGuideV()">│ L. media</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" onclick="toggleFreeRatio()" id="btn-free-ratio" title="Cambiar ratio libre/fijo">📐 Ratio</button>
+      <button class="tool-btn" onclick="resetCropBox()">⊡ Reset</button>
+    </div>
+
+    <div class="canvas-wrapper" id="crop-canvas-wrapper">
+      <div id="crop-section" class="visible">
+        <div class="crop-empty" id="crop-empty-msg">
+          <div class="icon">📷</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text)">Selecciona una foto del panel izquierdo</div>
+          <div style="font-size:12px;margin-top:6px">Las fotos en pack comparten encuadre con la primera (★)</div>
+        </div>
+        <div id="crop-editor" style="display:none; flex-direction:column; align-items:center; gap:10px;">
+          <div id="pack-banner" class="pack-banner" style="display:none">
+            <span>★</span><span id="pack-banner-text"></span>
+          </div>
+          <div class="crop-container" id="crop-container">
+            <img id="crop-img" alt="">
+            <div class="crop-box" id="crop-box">
+              <div class="crop-handle tl" data-dir="tl"></div>
+              <div class="crop-handle tr" data-dir="tr"></div>
+              <div class="crop-handle bl" data-dir="bl"></div>
+              <div class="crop-handle br" data-dir="br"></div>
+            </div>
+            <div class="guide-line" id="guide-h" style="display:none; top:50%"></div>
+            <div class="guide-vertical" id="guide-v" style="display:none; left:50%"></div>
+          </div>
+          <div class="help-tip">
+            <b>Plano (─):</b> alinea ojos/dientes &nbsp;·&nbsp;
+            <b>L. media (│):</b> centra la línea media &nbsp;·&nbsp;
+            <b>Enderezar:</b> rotación fina ±10°
+          </div>
+          <div class="crop-actions">
+            <button class="crop-action-btn confirm" onclick="confirmCrop()">✓ Confirmar recorte</button>
+            <button class="crop-action-btn" onclick="changePhoto()">🔄 Cambiar foto</button>
+            <button class="crop-action-btn danger" onclick="removePhoto()">🗑 Eliminar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="mosaic-section">
+        <div class="help-tip" style="color:var(--accent)">💡 <b>Arrastra</b> el centro de una foto para moverla &nbsp;·&nbsp; <b>arrastra las esquinas amarillas</b> para agrandar/reducir</div>
+        <div class="mosaic-canvas-wrap" id="mosaic-wrap">
+          <canvas id="mosaic-canvas-el"></canvas>
+          <div class="mosaic-overlay" id="mosaic-overlay"></div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
+          <button class="crop-action-btn confirm" onclick="downloadMosaic()">⬇ Descargar JPG A4</button>
+          <button class="crop-action-btn" onclick="resetMosaicOffsets()">↺ Reset alineación</button>
+          <button class="crop-action-btn" onclick="switchView('crop')">← Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="color-section">
+      <div class="color-tabs" id="color-tabs"></div>
+      <div class="color-top-panel">
+        <div class="color-top-info-row">
+          <span class="color-toolbar-info">Click en fotos para <b>seleccionar</b>. Botón 🎨 para marcar referencia.</span>
+          <span class="selection-count" id="selection-count">0 seleccionadas</span>
+          <div style="flex:1"></div>
+          <button class="crop-action-btn" onclick="selectAllInGroup()">☑ Todas</button>
+          <button class="crop-action-btn" onclick="deselectAll()">☐ Ninguna</button>
+          <button class="crop-action-btn" onclick="toggleAllOriginal()" id="btn-toggle-original">👁 Ver originales</button>
+        </div>
+        <div class="color-sliders-row">
+          <div class="color-slider-group">
+            <label>Brillo <span id="cv-brightness">—</span></label>
+            <input type="range" id="cs-brightness" min="50" max="150" value="100" oninput="onColorSlider('brightness')" disabled>
+          </div>
+          <div class="color-slider-group">
+            <label>Contraste <span id="cv-contrast">—</span></label>
+            <input type="range" id="cs-contrast" min="50" max="150" value="100" oninput="onColorSlider('contrast')" disabled>
+          </div>
+          <div class="color-slider-group">
+            <label>Saturación <span id="cv-saturation">—</span></label>
+            <input type="range" id="cs-saturation" min="50" max="150" value="100" oninput="onColorSlider('saturation')" disabled>
+          </div>
+          <div class="color-slider-group">
+            <label>Temperatura <span id="cv-warmth">—</span></label>
+            <input type="range" id="cs-warmth" min="-30" max="30" value="0" oninput="onColorSlider('warmth')" disabled>
+          </div>
+        </div>
+        <div class="color-actions-row">
+          <button class="crop-action-btn" onclick="resetSelectedColors()">⟲ Reset color de seleccionadas</button>
+          <div style="flex:1"></div>
+          <button class="crop-action-btn confirm" onclick="autoMatchSelected()" style="background: linear-gradient(135deg, #3ecf8e, #10b981);">✨ Auto-igualar a referencia (sutil)</button>
+        </div>
+      </div>
+      <div class="color-grid-area" id="color-grid-area"></div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="right-panel-title">Recortes</div>
+    <div class="cropped-list" id="cropped-list">
+      <div style="padding:20px 10px; text-align:center; color:var(--text2); font-size:11px;">Las fotos confirmadas aparecerán aquí</div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3 id="modal-title">Orientación de oclusal</h3>
+    <p id="modal-desc"></p>
+    <div class="modal-preview" id="modal-preview"></div>
+    <div class="transform-mini-btns">
+      <button onclick="modalTransform('flipH')">⇄ Espejo H</button>
+      <button onclick="modalTransform('flipV')">⇅ Espejo V</button>
+      <button onclick="modalTransform('rot90')">↻ +90°</button>
+      <button onclick="modalTransform('rotm90')">↺ -90°</button>
+      <button onclick="modalTransform('rot180')">↻ 180°</button>
+    </div>
+    <div id="modal-extra" style="text-align:center; margin-top:8px;"></div>
+    <div class="modal-actions">
+      <button class="crop-action-btn" onclick="closeModal()">Cancelar</button>
+      <button class="crop-action-btn confirm" onclick="modalOk()">✓ Guardar recorte</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="brush-modal">
+  <div class="modal" style="max-width:800px;">
+    <h3>🖌 Pincel de aclarar</h3>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+      <label style="font-size:11px; color:var(--text2);">Tamaño:</label>
+      <input type="range" id="brush-size" min="10" max="300" value="100" style="width:160px; accent-color:var(--accent);">
+      <span id="brush-size-val" style="font-size:11px; font-family:'DM Mono',monospace; color:var(--accent);">100px</span>
+      <label style="font-size:11px; color:var(--text2);">Intensidad:</label>
+      <input type="range" id="brush-opacity" min="1" max="25" value="5" style="width:120px; accent-color:var(--yellow);">
+      <span id="brush-opacity-val" style="font-size:11px; font-family:'DM Mono',monospace; color:var(--yellow);">5%</span>
+      <button class="crop-action-btn" onclick="brushUndo()">↩ Deshacer</button>
+    </div>
+    <div style="overflow:auto; max-height:60vh; text-align:center; background:#000; border-radius:8px; position:relative;">
+      <canvas id="brush-canvas" style="cursor:none; max-width:100%;"></canvas>
+      <div id="brush-cursor" style="display:none; position:absolute; border:2px solid #3ecf8e; border-radius:50%; pointer-events:none; z-index:10; box-shadow: 0 0 0 1px rgba(0,0,0,.5);"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="crop-action-btn" onclick="brushCancel()">Cancelar</button>
+      <button class="crop-action-btn confirm" onclick="brushApply()">✓ Aplicar aclarado</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="extra-type-modal">
+  <div class="modal">
+    <h3>Añadir foto extra</h3>
+    <p>Selecciona qué tipo de foto es (para que quede guardada con el nombre correcto en el ZIP):</p>
+    <div id="extra-type-list" style="max-height: 400px; overflow-y: auto;"></div>
+    <div class="modal-actions">
+      <button class="crop-action-btn" onclick="closeExtraTypeModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="help-modal-bg">
+  <div class="modal">
+    <h3>📖 Guía rápida</h3>
+    <div class="modal-help-section">
+      <h4>① Recorte</h4>
+      <p>Selecciona cada foto y ajusta el recuadro (proporción fija). Las fotos en pack copian el encuadre de la primera (★ master) para que salgan iguales.</p>
+    </div>
+    <div class="modal-help-section">
+      <h4>🦷 Oclusales</h4>
+      <p>Al confirmar aparece una ventana con vista previa. Usa espejo/rotar hasta que la orientación sea correcta y guarda.</p>
+    </div>
+    <div class="modal-help-section">
+      <h4>② Color</h4>
+      <p>Fotos organizadas por filas del mosaico. Click para seleccionar (múltiples). Sliders arriba solo afectan a las seleccionadas. Botón 🎨 en cada foto para marcar referencia. Auto-igualar hace ajuste sutil (±20% máx).</p>
+    </div>
+    <div class="modal-help-section">
+      <h4>③ Mosaico A4</h4>
+      <p>Arrastra cualquier foto verticalmente para alinear planos. Descarga JPG A4 imprimible.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="crop-action-btn confirm" onclick="closeHelp()">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="photo-input" accept="image/*" onchange="loadPhotoFile(this)">
+<script>
+
+// =====================================================
+// DATA MODEL
+// Each slot has a colorRow (for tab in Color view) and a pack
+// (for shared crop between related photos).
+// =====================================================
+const SET_SLOTS = [
+  { id: 'frontal_reposo',  name: 'FRONTAL',                  group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 3/4,  icon: '😐', row: 1 },
+  { id: 'frontal_sonrisa', name: 'FRONTAL SONRISA',          group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 3/4,  icon: '😊', row: 1 },
+  { id: 'perfil_der',      name: 'PERFIL',                   group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 3/4,  icon: '👤', row: 1 },
+  { id: 'semiperfil',      name: 'PERFIL MIRADA',            group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 3/4,  icon: '👥', row: 1 },
+  { id: 'lateral_der_ocl', name: 'LATERAL DERECHO',          group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_laterales_ocl', ratio: 3/2,  icon: '🦷', row: 2 },
+  { id: 'frontal_ocl',     name: 'FRONTAL DENTAL',           group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_intra_frontal', ratio: 3/2,  icon: '🦷', row: 2 },
+  { id: 'lateral_izq_ocl', name: 'LATERAL IZQUIERDO',        group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_laterales_ocl', ratio: 3/2, icon: '🦷', row: 2 },
+  { id: 'oclusal_sup',     name: 'OCLUSAL SUPERIOR',         group: 'OCLUSAL',       colorRow: 'row_oclusal',   pack: 'pack_oclusales',     ratio: 4/3,  icon: '⬆️', row: 3, occlusal: 'sup' },
+  { id: 'oclusal_inf',     name: 'OCLUSAL INFERIOR',         group: 'OCLUSAL',       colorRow: 'row_oclusal',   pack: 'pack_oclusales',     ratio: 4/3,  icon: '⬇️', row: 3, occlusal: 'inf' },
+  { id: 'canino_der',      name: 'LATERAL CANINO DERECHO',   group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_caninos',       ratio: 4/5,  icon: '🦷', row: 4 },
+  { id: 'frontal_abierta', name: 'FRONTAL DENTAL INFERIOR',  group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_intra_frontal', ratio: 3/2,  icon: '🦷', row: 4 },
+  { id: 'canino_izq',      name: 'LATERAL CANINO IZQUIERDO', group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_caninos',       ratio: 4/5,  icon: '🦷', row: 4 },
+  { id: 'labios_reposo',   name: 'LABIOS REPOSO',            group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 16/9, icon: '👄', row: 5 },
+  { id: 'labios_sonrisa',  name: 'LABIOS SONRISA',           group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 16/9, icon: '😁', row: 5 },
+  // Extras — always visible but optional (not part of the 5-row mosaic)
+  { id: 'frontal_dental_abierta', name: 'FRONTAL DENTAL ABIERTA', group: 'EXTRAS', colorRow: 'row_caninos', pack: null, ratio: 3/2, icon: '🦷', row: 0, optional: true },
+  { id: 'perfil_sonrisa',         name: 'PERFIL SONRISA',         group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 3/4, icon: '👤', row: 0, optional: true },
+  { id: 'perfil_mirada_sonrisa',  name: 'PERFIL MIRADA SONRISA',  group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 3/4, icon: '👥', row: 0, optional: true },
+];
+
+// Available extra photo types (from Fourden system)
+const EXTRA_PHOTO_TYPES = [
+  { id: 'frontal_dental_abierta', name: 'FRONTAL DENTAL ABIERTA', icon: '🦷' },
+  { id: 'perfil_sonrisa',         name: 'PERFIL SONRISA',         icon: '👤' },
+  { id: 'perfil_mirada_sonrisa',  name: 'PERFIL MIRADA SONRISA',  icon: '👥' },
+];
+
+const COLOR_ROWS = [
+  { id: 'row_cara',      name: 'Fila 1 · Cara',            icon: '😊' },
+  { id: 'row_intra_ocl', name: 'Fila 2 · Intraorales ocl.', icon: '🦷' },
+  { id: 'row_oclusal',   name: 'Fila 3 · Oclusales',       icon: '⬆️' },
+  { id: 'row_caninos',   name: 'Fila 4 · Caninos + Abierta', icon: '🦷' },
+  { id: 'row_labios',    name: 'Fila 5 · Labios',          icon: '👄' },
+];
+
+let slots = SET_SLOTS.map(s => ({
+  ...s,
+  imgSrc: null,
+  imgEl: null,               // Cached HTMLImageElement for the source
+  croppedCanvas: null,       // With color filter applied
+  croppedCanvasOriginal: null, // Without color filter
+  thumbDataUrl: null,        // Cache for list thumbnails
+  rotation: 0, fineRotation: 0, flipH: false, flipV: false,
+  brightness: 100, contrast: 100, saturation: 100, warmth: 0,
+  cropBoxData: null,         // Normalized crop box: {normX, normY, normW, normH}
+  isColorRef: false,
+  colorStats: null
+}));
+let extraSlots = [];
+let currentSlotIdx = null;
+let logoImg = null;
+const DEFAULT_LOGO_B64 = "data:image/jpeg;base64,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";
+let cropImgEl, cropBoxEl, cropContainerEl, guideHEl, guideVEl;
+let mosaicLayoutData = null;
+let mosaicOffsets = {};
+let currentColorRow = 'row_cara';
+let colorSelectedIds = new Set();
+let allOriginalShown = false;
+
+// =====================================================
+// HELPERS
+// =====================================================
+// Pack master: FIRST slot in the array that has cropBoxData for a given pack.
+// This is the source of truth for pack encuadre.
+function getPackMaster(packId) {
+  if (!packId) return null;
+  return slots.find(s => s.pack === packId && s.cropBoxData);
+}
+function isPackMaster(slot) {
+  if (!slot.pack || !slot.cropBoxData) return false;
+  return getPackMaster(slot.pack)?.id === slot.id;
+}
+// Find the FIRST cropped slot in slots with the SAME ratio — used to
+// inherit crop SIZE (not position) across the same category.
+function getSizeTemplate(slot) {
+  return slots.find(s => s.id !== slot.id && s.cropBoxData && Math.abs(s.ratio - slot.ratio) < 0.01);
+}
+function isSizeTemplateMaster(slot) {
+  if (!slot.cropBoxData) return false;
+  return getSizeTemplate({ id: '__none__', ratio: slot.ratio })?.id === slot.id;
+}
+function getSlotByIdx(idx) {
+  if (idx == null) return null;
+  if (idx < slots.length) return slots[idx];
+  return extraSlots[idx - slots.length];
+}
+function getAllSlots() { return [...slots, ...extraSlots]; }
+function slotsInColorRow(rowId) { return slots.filter(s => s.colorRow === rowId && s.croppedCanvas); }
+function getColorRef(rowId) { return slots.find(s => s.colorRow === rowId && s.isColorRef && s.croppedCanvas); }
+
+function formatRatio(r) {
+  if (Math.abs(r - 3/4) < .01) return '3:4';
+  if (Math.abs(r - 3/2) < .01) return '3:2';
+  if (Math.abs(r - 4/3) < .01) return '4:3';
+  if (Math.abs(r - 4/5) < .01) return '4:5';
+  if (Math.abs(r - 16/9) < .01) return '16:9';
+  return r.toFixed(2);
+}
+
+function buildFilter(slot) {
+  const b = slot.brightness || 100, c = slot.contrast || 100, s = slot.saturation || 100, w = slot.warmth || 0;
+  // When everything is default, return 'none' to avoid CSS filter color artifacts
+  if (b === 100 && c === 100 && s === 100 && w === 0) return 'none';
+  // POWER-LAW COMPENSATION: CSS brightness() multiplies RGB linearly → boosts chroma.
+  // Compensate: sat × (100/brightness)^0.9 to neutralize.
+  let effectiveSat = s;
+  if (b > 0 && b !== 100) {
+    effectiveSat = s * Math.pow(100 / b, 0.9);
+  }
+  effectiveSat = Math.max(20, Math.min(200, effectiveSat));
+  const sepia = Math.max(0, w) / 100;
+  const hueRot = w < 0 ? Math.abs(w) * .5 : 0;
+  return `brightness(${b}%) contrast(${c}%) saturate(${effectiveSat.toFixed(1)}%) sepia(${sepia}) hue-rotate(${-hueRot}deg)`;
+}
+
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + (type || '');
+  clearTimeout(toast._to);
+  toast._to = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// =====================================================
+// INIT
+// =====================================================
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('patient-date').value = new Date().toISOString().split('T')[0];
+  cropImgEl = document.getElementById('crop-img');
+  cropBoxEl = document.getElementById('crop-box');
+  cropContainerEl = document.getElementById('crop-container');
+  guideHEl = document.getElementById('guide-h');
+  guideVEl = document.getElementById('guide-v');
+  renderPhotoList();
+  setupCropHandlers();
+  setupGuideHandlers();
+  renderColorTabs();
+  loadDefaultLogo();
+});
+
+function loadDefaultLogo() {
+  const img = new Image();
+  img.onload = () => { logoImg = img; };
+  img.src = DEFAULT_LOGO_B64;
+  document.getElementById('logo-preview').src = DEFAULT_LOGO_B64;
+  document.getElementById('logo-preview').style.display = 'block';
+  const hl = document.getElementById('header-logo');
+  hl.style.background = `#fff url(${DEFAULT_LOGO_B64}) center/contain no-repeat`;
+  hl.textContent = '';
+}
+
+
+// =====================================================
+// PHOTO LIST (with thumbnail caching for performance)
+// =====================================================
+function invalidateThumb(slot) { slot.thumbDataUrl = null; }
+function getThumb(slot) {
+  if (!slot.croppedCanvas) return null;
+  if (!slot.thumbDataUrl) {
+    // Generate small thumb ONCE and cache
+    const tc = document.createElement('canvas');
+    const w = 68, h = Math.max(1, Math.round(68 * slot.croppedCanvas.height / slot.croppedCanvas.width));
+    tc.width = w; tc.height = h;
+    tc.getContext('2d').drawImage(slot.croppedCanvas, 0, 0, w, h);
+    slot.thumbDataUrl = tc.toDataURL('image/jpeg', .6);
+  }
+  return slot.thumbDataUrl;
+}
+
+function renderPhotoList() {
+  const cont = document.getElementById('photo-list-container');
+  cont.innerHTML = '';
+  const groups = {};
+  slots.forEach((s, i) => { (groups[s.group] = groups[s.group] || []).push({ slot: s, idx: i }); });
+  Object.keys(groups).forEach(g => {
+    const groupDiv = document.createElement('div');
+    const lbl = document.createElement('div');
+    lbl.className = 'pack-label';
+    lbl.innerHTML = `<span>${g}</span>`;
+    groupDiv.appendChild(lbl);
+    const list = document.createElement('div');
+    list.className = 'photo-list';
+    groups[g].forEach(({ slot, idx }) => list.appendChild(buildSlotEl(slot, idx)));
+    groupDiv.appendChild(list);
+    cont.appendChild(groupDiv);
+  });
+  if (extraSlots.length) {
+    const div = document.createElement('div');
+    const lbl = document.createElement('div');
+    lbl.className = 'pack-label';
+    lbl.innerHTML = '<span>EXTRAS</span>';
+    div.appendChild(lbl);
+    const list = document.createElement('div');
+    list.className = 'photo-list';
+    extraSlots.forEach((slot, i) => list.appendChild(buildSlotEl(slot, slots.length + i)));
+    div.appendChild(list);
+    cont.appendChild(div);
+  }
+}
+
+function buildSlotEl(slot, idx) {
+  const div = document.createElement('div');
+  let cls = 'photo-slot';
+  if (slot.croppedCanvas) cls += ' loaded';
+  if (idx === currentSlotIdx) cls += ' selected';
+  if (slot.isColorRef) cls += ' color-ref';
+  div.className = cls;
+  div.onclick = () => selectSlot(idx);
+
+  const thumb = document.createElement('div');
+  const thumbUrl = getThumb(slot);
+  if (thumbUrl) {
+    thumb.className = 'slot-thumb';
+    const img = document.createElement('img');
+    img.src = thumbUrl;
+    thumb.appendChild(img);
+  } else {
+    thumb.className = 'slot-thumb-empty';
+    thumb.textContent = slot.icon;
+  }
+
+  const info = document.createElement('div');
+  info.className = 'slot-info';
+  let tagText = formatRatio(slot.ratio);
+  if (slot.pack) {
+    if (isPackMaster(slot)) tagText += ' · ★ master';
+    else tagText += ' · pack';
+  }
+  info.innerHTML = `<div class="slot-name">${slot.name}</div><div class="slot-tag">${tagText}</div>`;
+
+  const badge = document.createElement('div');
+  if (slot.croppedCanvas) {
+    badge.className = 'slot-badge ok';
+    badge.textContent = '✓';
+  } else {
+    badge.className = 'slot-badge empty';
+    badge.textContent = '—';
+  }
+
+  div.appendChild(thumb);
+  div.appendChild(info);
+  div.appendChild(badge);
+  return div;
+}
+
+function addExtraSlot() {
+  showExtraTypeModal();
+}
+
+function showExtraTypeModal() {
+  // Build simple prompt with type options
+  const modal = document.getElementById('extra-type-modal');
+  const list = document.getElementById('extra-type-list');
+  list.innerHTML = '';
+  // Preset types
+  EXTRA_PHOTO_TYPES.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'crop-action-btn';
+    btn.style.width = '100%';
+    btn.style.justifyContent = 'flex-start';
+    btn.style.marginBottom = '4px';
+    btn.innerHTML = `${t.icon} ${t.name}`;
+    btn.onclick = () => { createExtraSlot(t.name, t.icon); closeExtraTypeModal(); };
+    list.appendChild(btn);
+  });
+  // Custom name
+  const customBtn = document.createElement('button');
+  customBtn.className = 'crop-action-btn';
+  customBtn.style.width = '100%';
+  customBtn.style.justifyContent = 'flex-start';
+  customBtn.style.marginTop = '8px';
+  customBtn.innerHTML = '✏️ Nombre personalizado...';
+  customBtn.onclick = () => {
+    const name = prompt('Nombre de la foto extra:', 'EXTRA ' + (extraSlots.length + 1));
+    if (name && name.trim()) { createExtraSlot(name.trim().toUpperCase(), '📷'); closeExtraTypeModal(); }
+  };
+  list.appendChild(customBtn);
+  modal.classList.add('show');
+}
+
+function closeExtraTypeModal() {
+  document.getElementById('extra-type-modal').classList.remove('show');
+}
+
+function createExtraSlot(name, icon) {
+  const n = extraSlots.length + 1;
+  extraSlots.push({
+    id: 'extra_' + n + '_' + name.replace(/[^A-Z0-9]/gi, '').toLowerCase(),
+    name: name, group: 'EXTRAS',
+    colorRow: 'row_cara', pack: null, ratio: 4/3, icon: icon || '📷', extra: true,
+    imgSrc: null, imgEl: null, croppedCanvas: null, croppedCanvasOriginal: null, thumbDataUrl: null,
+    rotation: 0, fineRotation: 0, flipH: false, flipV: false,
+    brightness: 100, contrast: 100, saturation: 100, warmth: 0,
+    cropBoxData: null, isColorRef: false, colorStats: null
+  });
+  renderPhotoList();
+  toast(`Añadida: ${name}`, 'success');
+}
+
+// =====================================================
+// SELECT SLOT (main entry when clicking a photo in the list)
+// =====================================================
+function selectSlot(idx) {
+  currentSlotIdx = idx;
+  const slot = getSlotByIdx(idx);
+  if (!slot) return;
+
+  // Update visual selection (partial update, no full re-render)
+  document.querySelectorAll('.photo-slot').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+
+  document.getElementById('current-slot-label').textContent = slot.name;
+  const ratioTag = document.getElementById('current-slot-ratio');
+  ratioTag.textContent = formatRatio(slot.ratio);
+  ratioTag.style.display = 'inline-block';
+
+  updatePackBanner(slot);
+
+  // Sync free ratio button
+  const frBtn = document.getElementById('btn-free-ratio');
+  frBtn.classList.toggle('active', !!slot._freeRatio);
+  frBtn.textContent = slot._freeRatio ? '📐 Ratio libre' : '📐 Ratio fijo';
+
+  // Sync sliders
+  document.getElementById('s-brightness').value = slot.brightness || 100;
+  document.getElementById('s-contrast').value = slot.contrast || 100;
+  document.getElementById('s-saturation').value = slot.saturation || 100;
+  document.getElementById('s-warmth').value = slot.warmth || 0;
+  document.getElementById('s-rotate-fine').value = slot.fineRotation || 0;
+  document.getElementById('v-rotate-fine').textContent = (slot.fineRotation || 0).toFixed(1) + '°';
+  ['brightness','contrast','saturation','warmth'].forEach(updateSliderVal);
+
+  if (slot.imgSrc) {
+    showCropEditor(slot);
+  } else {
+    document.getElementById('crop-empty-msg').style.display = 'block';
+    document.getElementById('crop-editor').style.display = 'none';
+    document.getElementById('photo-input').click();
+  }
+}
+
+function updatePackBanner(slot) {
+  const packTag = document.getElementById('current-pack-tag');
+  const packBanner = document.getElementById('pack-banner');
+  const packBannerText = document.getElementById('pack-banner-text');
+
+  // First check pack (strict grouping)
+  if (slot.pack) {
+    const master = getPackMaster(slot.pack);
+    packTag.style.display = 'inline-block';
+    if (master && master.id !== slot.id) {
+      packTag.textContent = `PACK · sigue a ${master.name}`;
+      packBanner.style.display = 'flex';
+      packBannerText.innerHTML = `Encuadre copiado de <b>"${master.name}"</b>. Ajusta la posición si es necesario y confirma.`;
+      return;
+    } else if (master && master.id === slot.id) {
+      packTag.textContent = '★ MASTER del pack';
+      packBanner.style.display = 'flex';
+      packBannerText.innerHTML = `Esta es la foto <b>master</b>. Su recorte ya se aplica al resto del pack.`;
+      return;
+    } else {
+      packTag.textContent = 'PACK · primer recorte';
+      packBanner.style.display = 'flex';
+      packBannerText.innerHTML = `Cuando confirmes, las siguientes fotos del pack copiarán este encuadre.`;
+      return;
+    }
+  }
+
+  // Otherwise, check size template (same-ratio inheritance)
+  const template = getSizeTemplate(slot);
+  if (template && !slot.cropBoxData) {
+    packTag.style.display = 'inline-block';
+    packTag.textContent = `📐 Tamaño de ${template.name}`;
+    packBanner.style.display = 'flex';
+    packBannerText.innerHTML = `Se usa el mismo tamaño de recuadro que <b>"${template.name}"</b> (proporciones iguales). Muévelo donde toque.`;
+  } else {
+    packTag.style.display = 'none';
+    packBanner.style.display = 'none';
+  }
+}
+
+function changePhoto() { document.getElementById('photo-input').click(); }
+
+function removePhoto() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  if (!confirm(`¿Eliminar la foto "${slot.name}"?`)) return;
+  slot.imgSrc = null; slot.imgEl = null;
+  slot.croppedCanvas = null; slot.croppedCanvasOriginal = null; slot.thumbDataUrl = null;
+  slot.cropBoxData = null;
+  slot.rotation = 0; slot.fineRotation = 0; slot.flipH = false; slot.flipV = false;
+  slot.isColorRef = false;
+  document.getElementById('crop-empty-msg').style.display = 'block';
+  document.getElementById('crop-editor').style.display = 'none';
+  renderPhotoList();
+  updateCroppedList();
+  toast('Foto eliminada', 'success');
+}
+
+function loadPhotoFile(input) {
+  if (!input.files[0] || currentSlotIdx === null) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const slot = getSlotByIdx(currentSlotIdx);
+    slot.imgSrc = e.target.result;
+    slot.imgEl = null;
+    slot.cropBoxData = null;
+    slot.flipH = false; slot.flipV = false; slot.rotation = 0; slot.fineRotation = 0;
+    // Reset ALL color to clean state — prevents previous values leaking to new photo
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    slot.croppedCanvas = null; slot.croppedCanvasOriginal = null;
+    slot.thumbDataUrl = null; slot._colorImgUrl = null;
+    showCropEditor(slot);
+  };
+  reader.readAsDataURL(input.files[0]);
+  input.value = '';
+}
+
+
+// =====================================================
+// CROP EDITOR — Load image ONCE and cache it in slot.imgEl
+// =====================================================
+function showCropEditor(slot) {
+  document.getElementById('crop-empty-msg').style.display = 'none';
+  document.getElementById('crop-editor').style.display = 'flex';
+
+  if (slot.imgEl && cropImgEl.src === slot.imgSrc) {
+    applyImgTransform(slot);
+    initCropBox(slot);
+    return;
+  }
+
+  cropImgEl.onload = () => {
+    requestAnimationFrame(() => {
+      applyImgTransform(slot);
+      initCropBox(slot);
+    });
+  };
+  cropImgEl.src = slot.imgSrc;
+  if (!slot.imgEl) {
+    const cached = new Image();
+    cached.onload = () => { slot.imgEl = cached; };
+    cached.src = slot.imgSrc;
+  }
+}
+
+function applyImgTransform(slot) {
+  if (!slot) return;
+  const t = [];
+  const totalRot = (slot.rotation || 0) + (slot.fineRotation || 0);
+  if (totalRot) t.push(`rotate(${totalRot}deg)`);
+  if (slot.flipH) t.push('scaleX(-1)');
+  if (slot.flipV) t.push('scaleY(-1)');
+  cropImgEl.style.transform = t.join(' ') || 'none';
+  cropImgEl.style.filter = buildFilter(slot);
+  syncFlipButtons(slot);
+}
+
+function syncFlipButtons(slot) {
+  document.getElementById('btn-flip-h').classList.toggle('active', !!slot.flipH);
+  document.getElementById('btn-flip-v').classList.toggle('active', !!slot.flipV);
+}
+
+// =====================================================
+// CROP BOX INIT — Applies pack inheritance correctly
+// =====================================================
+function initCropBox(slot) {
+  const imgRect = cropImgEl.getBoundingClientRect();
+  const contRect = cropContainerEl.getBoundingClientRect();
+  const imgW = imgRect.width, imgH = imgRect.height;
+  if (imgW < 20 || imgH < 20) {
+    setTimeout(() => initCropBox(slot), 60);
+    return;
+  }
+  const r = slot.ratio;
+  let bw, bh, bx, by;
+
+  // PRIORITY 1: This slot already has its own saved crop → use exactly
+  if (slot.cropBoxData) {
+    bw = slot.cropBoxData.normW * imgW;
+    bh = slot.cropBoxData.normH * imgH;
+    if (Math.abs((bw / bh) - r) > 0.05) {
+      if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
+      else { bw = imgW * .9; bh = bw / r; }
+    }
+    bx = slot.cropBoxData.normX * imgW;
+    by = slot.cropBoxData.normY * imgH;
+  }
+  // PRIORITY 2: Same PACK master exists → inherit SIZE and POSITION (packs = strict grouping like frontal reposo+sonrisa)
+  else if (slot.pack && getPackMaster(slot.pack)) {
+    const master = getPackMaster(slot.pack);
+    if (master.id !== slot.id) {
+      bw = master.cropBoxData.normW * imgW;
+      bh = master.cropBoxData.normH * imgH;
+      if (Math.abs((bw / bh) - r) > 0.05) {
+        if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
+        else { bw = imgW * .9; bh = bw / r; }
+      }
+      // Same pack → same position too (they are same shot angle basically)
+      bx = master.cropBoxData.normX * imgW;
+      by = master.cropBoxData.normY * imgH;
+    } else {
+      // Master itself with no data (edge case)
+      if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
+      else { bw = imgW * .9; bh = bw / r; }
+      bx = (imgW - bw) / 2;
+      by = (imgH - bh) / 2;
+    }
+  }
+  // PRIORITY 3: Another slot with SAME RATIO already cropped → inherit only SIZE, center the position
+  else {
+    const template = getSizeTemplate(slot);
+    if (template) {
+      bw = template.cropBoxData.normW * imgW;
+      bh = template.cropBoxData.normH * imgH;
+      if (Math.abs((bw / bh) - r) > 0.05) {
+        if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
+        else { bw = imgW * .9; bh = bw / r; }
+      }
+      // Center position by default; user will move it
+      bx = (imgW - bw) / 2;
+      by = (imgH - bh) / 2;
+    } else {
+      // First-ever crop of this ratio: default to 90% of the smaller dimension
+      if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
+      else { bw = imgW * .9; bh = bw / r; }
+      bx = (imgW - bw) / 2;
+      by = (imgH - bh) / 2;
+    }
+  }
+
+  // Clamp inside bounds
+  bx = Math.max(0, Math.min(imgW - bw, bx));
+  by = Math.max(0, Math.min(imgH - bh, by));
+
+  const offX = imgRect.left - contRect.left;
+  const offY = imgRect.top - contRect.top;
+  cropBoxEl.style.left = (offX + bx) + 'px';
+  cropBoxEl.style.top = (offY + by) + 'px';
+  cropBoxEl.style.width = bw + 'px';
+  cropBoxEl.style.height = bh + 'px';
+
+  cropContainerEl.dataset.offX = offX;
+  cropContainerEl.dataset.offY = offY;
+  cropContainerEl.dataset.imgW = imgW;
+  cropContainerEl.dataset.imgH = imgH;
+}
+
+function resetCropBox() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.cropBoxData = null;
+  initCropBox(slot);
+}
+
+// =====================================================
+// DRAG / RESIZE HANDLERS
+// =====================================================
+function setupCropHandlers() {
+  const box = cropBoxEl;
+
+  const startDrag = (clientX, clientY) => {
+    const sl = parseFloat(box.style.left), st = parseFloat(box.style.top);
+    return (cx, cy) => {
+      const offX = parseFloat(cropContainerEl.dataset.offX) || 0;
+      const offY = parseFloat(cropContainerEl.dataset.offY) || 0;
+      const imgW = parseFloat(cropContainerEl.dataset.imgW);
+      const imgH = parseFloat(cropContainerEl.dataset.imgH);
+      let nl = sl + (cx - clientX), nt = st + (cy - clientY);
+      nl = Math.max(offX, Math.min(offX + imgW - box.offsetWidth, nl));
+      nt = Math.max(offY, Math.min(offY + imgH - box.offsetHeight, nt));
+      box.style.left = nl + 'px';
+      box.style.top = nt + 'px';
+    };
+  };
+
+  box.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('crop-handle')) return;
+    if (e.target.classList.contains('guide-line') || e.target.classList.contains('guide-vertical')) return;
+    e.preventDefault();
+    const move = startDrag(e.clientX, e.clientY);
+    const onMove = ev => move(ev.clientX, ev.clientY);
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  box.addEventListener('touchstart', e => {
+    if (e.target.classList.contains('crop-handle')) return;
+    if (e.target.classList.contains('guide-line') || e.target.classList.contains('guide-vertical')) return;
+    const t = e.touches[0];
+    const move = startDrag(t.clientX, t.clientY);
+    const onMove = ev => { ev.preventDefault(); const t = ev.touches[0]; move(t.clientX, t.clientY); };
+    const onEnd = () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+  }, { passive: true });
+
+  box.querySelectorAll('.crop-handle').forEach(handle => {
+    const dir = handle.dataset.dir;
+    const startResize = (clientX, clientY) => {
+      const sl = parseFloat(box.style.left), st = parseFloat(box.style.top);
+      const sw = box.offsetWidth, sh = box.offsetHeight;
+      const slot = getSlotByIdx(currentSlotIdx);
+      const ratio = slot ? slot.ratio : 1;
+      const isFree = slot && slot._freeRatio;
+      return (cx, cy) => {
+        const dx = cx - clientX, dy = cy - clientY;
+        let signX = (dir === 'tr' || dir === 'br') ? 1 : -1;
+        let signY = (dir === 'bl' || dir === 'br') ? 1 : -1;
+        const dW = signX * dx, dH = signY * dy;
+        let newW = sw + dW, newH = sh + dH;
+        if (!isFree) {
+          if (newW / ratio > newH) newH = newW / ratio; else newW = newH * ratio;
+        }
+        newW = Math.max(60, newW); newH = Math.max(40, newH);
+        let nl = sl, nt = st;
+        if (dir === 'tr') nt = st + (sh - newH);
+        else if (dir === 'bl') nl = sl + (sw - newW);
+        else if (dir === 'tl') { nl = sl + (sw - newW); nt = st + (sh - newH); }
+        const offX = parseFloat(cropContainerEl.dataset.offX) || 0;
+        const offY = parseFloat(cropContainerEl.dataset.offY) || 0;
+        const imgW = parseFloat(cropContainerEl.dataset.imgW);
+        const imgH = parseFloat(cropContainerEl.dataset.imgH);
+        if (nl < offX) { newW -= (offX - nl); nl = offX; if (!isFree) newH = newW / ratio; }
+        if (nt < offY) { newH -= (offY - nt); nt = offY; if (!isFree) newW = newH * ratio; }
+        if (nl + newW > offX + imgW) newW = offX + imgW - nl;
+        if (nt + newH > offY + imgH) newH = offY + imgH - nt;
+        if (!isFree) { if (newW / ratio > newH) newW = newH * ratio; else newH = newW / ratio; }
+        box.style.left = nl + 'px';
+        box.style.top = nt + 'px';
+        box.style.width = newW + 'px';
+        box.style.height = newH + 'px';
+      };
+    };
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      const move = startResize(e.clientX, e.clientY);
+      const onMove = ev => move(ev.clientX, ev.clientY);
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    handle.addEventListener('touchstart', e => {
+      e.preventDefault(); e.stopPropagation();
+      const t = e.touches[0];
+      const move = startResize(t.clientX, t.clientY);
+      const onMove = ev => { ev.preventDefault(); const t = ev.touches[0]; move(t.clientX, t.clientY); };
+      const onEnd = () => {
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+      };
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onEnd);
+    }, { passive: false });
+  });
+}
+
+function setupGuideHandlers() {
+  guideHEl.addEventListener('mousedown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const sy = e.clientY;
+    const st = parseFloat(guideHEl.style.top) || 0;
+    const onMove = ev => {
+      const contH = cropContainerEl.getBoundingClientRect().height;
+      let nt = st + (ev.clientY - sy);
+      nt = Math.max(0, Math.min(contH, nt));
+      guideHEl.style.top = nt + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  guideVEl.addEventListener('mousedown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const sx = e.clientX;
+    const sl = parseFloat(guideVEl.style.left) || 0;
+    const onMove = ev => {
+      const contW = cropContainerEl.getBoundingClientRect().width;
+      let nl = sl + (ev.clientX - sx);
+      nl = Math.max(0, Math.min(contW, nl));
+      guideVEl.style.left = nl + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function toggleGuideH() {
+  const visible = guideHEl.style.display !== 'none';
+  guideHEl.style.display = visible ? 'none' : 'block';
+  if (!visible) guideHEl.style.top = (cropContainerEl.getBoundingClientRect().height / 2) + 'px';
+  document.getElementById('btn-guide-h').classList.toggle('active', !visible);
+}
+function toggleGuideV() {
+  const visible = guideVEl.style.display !== 'none';
+  guideVEl.style.display = visible ? 'none' : 'block';
+  if (!visible) guideVEl.style.left = (cropContainerEl.getBoundingClientRect().width / 2) + 'px';
+  document.getElementById('btn-guide-v').classList.toggle('active', !visible);
+}
+
+function updateFineRotation() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  const v = parseFloat(document.getElementById('s-rotate-fine').value);
+  slot.fineRotation = v;
+  document.getElementById('v-rotate-fine').textContent = v.toFixed(1) + '°';
+  applyImgTransform(slot);
+}
+function resetFineRotation() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.fineRotation = 0;
+  document.getElementById('s-rotate-fine').value = 0;
+  document.getElementById('v-rotate-fine').textContent = '0°';
+  applyImgTransform(slot);
+}
+
+function rotateCrop(deg) {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.rotation = ((slot.rotation || 0) + deg + 360) % 360;
+  applyImgTransform(slot);
+  requestAnimationFrame(() => initCropBox(slot));
+}
+function flipH() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.flipH = !slot.flipH;
+  applyImgTransform(slot);
+}
+function flipV() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.flipV = !slot.flipV;
+  applyImgTransform(slot);
+}
+
+
+// =====================================================
+// CONFIRM CROP
+// =====================================================
+function confirmCrop() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  // For oclusales: show manual orientation modal
+  if (slot.occlusal && !slot._occlusalConfirmed) {
+    showOcclusalModal(slot);
+    return;
+  }
+  slot._occlusalConfirmed = false;
+  doActualCrop(slot);
+}
+
+function doActualCrop(slot) {
+  const imgRect = cropImgEl.getBoundingClientRect();
+  const boxRect = cropBoxEl.getBoundingClientRect();
+  const relX = boxRect.left - imgRect.left;
+  const relY = boxRect.top - imgRect.top;
+  const relW = boxRect.width;
+  const relH = boxRect.height;
+
+  // Save normalized crop for pack inheritance
+  slot.cropBoxData = {
+    normX: relX / imgRect.width,
+    normY: relY / imgRect.height,
+    normW: relW / imgRect.width,
+    normH: relH / imgRect.height
+  };
+
+  const totalRot = ((slot.rotation || 0) + (slot.fineRotation || 0));
+  const angleRad = totalRot * Math.PI / 180;
+  const natW = cropImgEl.naturalWidth, natH = cropImgEl.naturalHeight;
+  const cosA = Math.abs(Math.cos(angleRad));
+  const sinA = Math.abs(Math.sin(angleRad));
+  const boundW = Math.ceil(natW * cosA + natH * sinA);
+  const boundH = Math.ceil(natW * sinA + natH * cosA);
+
+  const tempC = document.createElement('canvas');
+  tempC.width = boundW; tempC.height = boundH;
+  const tctx = tempC.getContext('2d');
+  tctx.translate(boundW / 2, boundH / 2);
+  tctx.rotate(angleRad);
+  if (slot.flipH) tctx.scale(-1, 1);
+  if (slot.flipV) tctx.scale(1, -1);
+  tctx.drawImage(cropImgEl, -natW / 2, -natH / 2, natW, natH);
+
+  const scaleX = boundW / imgRect.width;
+  const scaleY = boundH / imgRect.height;
+  const sx = Math.max(0, Math.round(relX * scaleX));
+  const sy = Math.max(0, Math.round(relY * scaleY));
+  const sw = Math.min(Math.round(relW * scaleX), boundW - sx);
+  const sh = Math.min(Math.round(relH * scaleY), boundH - sy);
+
+  const out = document.createElement('canvas');
+  out.width = sw; out.height = sh;
+  out.getContext('2d').drawImage(tempC, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  slot.croppedCanvasOriginal = out;
+  slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
+  invalidateThumb(slot);
+
+  renderPhotoList();
+  updateCroppedList();
+  toast('✓ ' + slot.name, 'success');
+
+  // Auto-jump to next pack member if this was the master (has pack + we just filled it)
+  autoJumpToNextInPack(slot);
+}
+
+// Automatically move to the next unfilled photo of the same pack
+function autoJumpToNextInPack(justCroppedSlot) {
+  if (!justCroppedSlot.pack) return;
+  const nextInPack = slots.find(s => s.pack === justCroppedSlot.pack && !s.croppedCanvas && s.imgSrc);
+  if (nextInPack) {
+    const idx = slots.indexOf(nextInPack);
+    setTimeout(() => selectSlot(idx), 250);
+  }
+}
+
+function applyColorFilterToCanvas(srcCanvas, slot) {
+  const filter = buildFilter(slot);
+  // When filter is 'none', return a clean copy without any CSS filter processing
+  if (filter === 'none') {
+    const out = document.createElement('canvas');
+    out.width = srcCanvas.width;
+    out.height = srcCanvas.height;
+    out.getContext('2d').drawImage(srcCanvas, 0, 0);
+    return out;
+  }
+  const out = document.createElement('canvas');
+  out.width = srcCanvas.width;
+  out.height = srcCanvas.height;
+  const ctx = out.getContext('2d');
+  ctx.filter = filter;
+  ctx.drawImage(srcCanvas, 0, 0);
+  return out;
+}
+
+function refreshCroppedColor(slot) {
+  if (!slot.croppedCanvasOriginal) return;
+  slot.croppedCanvas = applyColorFilterToCanvas(slot.croppedCanvasOriginal, slot);
+  invalidateThumb(slot);
+}
+
+// =====================================================
+// OCCLUSAL MODAL (manual orientation)
+// =====================================================
+function showOcclusalModal(slot) {
+  const modal = document.getElementById('modal-bg');
+  document.getElementById('modal-title').textContent = `Orientación de oclusal ${slot.occlusal === 'sup' ? 'SUPERIOR' : 'INFERIOR'}`;
+  document.getElementById('modal-desc').innerHTML = slot.occlusal === 'sup'
+    ? '<b>Superior:</b> arcada abre hacia abajo (paladar arriba). Usa los botones para orientarla y guarda.'
+    : '<b>Inferior:</b> arcada abre hacia arriba (lengua abajo). Usa los botones para orientarla y guarda.';
+  modal.dataset.slotId = slot.id;
+  refreshModalPreview(slot);
+  modal.classList.add('show');
+}
+
+function refreshModalPreview(slot) {
+  const imgRect = cropImgEl.getBoundingClientRect();
+  const boxRect = cropBoxEl.getBoundingClientRect();
+  const relX = boxRect.left - imgRect.left;
+  const relY = boxRect.top - imgRect.top;
+  const relW = boxRect.width, relH = boxRect.height;
+  const totalRot = ((slot.rotation || 0) + (slot.fineRotation || 0));
+  const angleRad = totalRot * Math.PI / 180;
+  const natW = cropImgEl.naturalWidth, natH = cropImgEl.naturalHeight;
+  const boundW = Math.ceil(natW * Math.abs(Math.cos(angleRad)) + natH * Math.abs(Math.sin(angleRad)));
+  const boundH = Math.ceil(natW * Math.abs(Math.sin(angleRad)) + natH * Math.abs(Math.cos(angleRad)));
+  const tempC = document.createElement('canvas');
+  tempC.width = boundW; tempC.height = boundH;
+  const tctx = tempC.getContext('2d');
+  tctx.filter = buildFilter(slot);
+  tctx.translate(boundW / 2, boundH / 2);
+  tctx.rotate(angleRad);
+  if (slot.flipH) tctx.scale(-1, 1);
+  if (slot.flipV) tctx.scale(1, -1);
+  tctx.drawImage(cropImgEl, -natW / 2, -natH / 2, natW, natH);
+  const scaleX = boundW / imgRect.width;
+  const scaleY = boundH / imgRect.height;
+  const sx = Math.max(0, Math.round(relX * scaleX));
+  const sy = Math.max(0, Math.round(relY * scaleY));
+  const sw = Math.min(Math.round(relW * scaleX), boundW - sx);
+  const sh = Math.min(Math.round(relH * scaleY), boundH - sy);
+  const previewC = document.createElement('canvas');
+  previewC.width = sw; previewC.height = sh;
+  previewC.getContext('2d').drawImage(tempC, sx, sy, sw, sh, 0, 0, sw, sh);
+  const preview = document.getElementById('modal-preview');
+  preview.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = previewC.toDataURL('image/jpeg', .8);
+  preview.appendChild(img);
+  document.getElementById('modal-extra').innerHTML =
+    `<div style="font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;">Estado: ${slot.flipH ? '⇄ ' : ''}${slot.flipV ? '⇅ ' : ''}${slot.rotation ? '↻' + slot.rotation + '° ' : ''}${slot.fineRotation ? '+' + slot.fineRotation.toFixed(1) + '° ' : ''}</div>`;
+}
+
+function modalTransform(action) {
+  const id = document.getElementById('modal-bg').dataset.slotId;
+  const slot = slots.find(s => s.id === id);
+  if (!slot) return;
+  if (action === 'flipH') slot.flipH = !slot.flipH;
+  else if (action === 'flipV') slot.flipV = !slot.flipV;
+  else if (action === 'rot90') slot.rotation = ((slot.rotation || 0) + 90) % 360;
+  else if (action === 'rotm90') slot.rotation = ((slot.rotation || 0) - 90 + 360) % 360;
+  else if (action === 'rot180') slot.rotation = ((slot.rotation || 0) + 180) % 360;
+  applyImgTransform(slot);
+  requestAnimationFrame(() => {
+    initCropBox(slot);
+    setTimeout(() => refreshModalPreview(slot), 60);
+  });
+}
+
+function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
+function modalOk() {
+  const id = document.getElementById('modal-bg').dataset.slotId;
+  const slot = slots.find(s => s.id === id);
+  if (slot) {
+    slot._occlusalConfirmed = true;
+    closeModal();
+    doActualCrop(slot);
+  }
+}
+function showHelp() { document.getElementById('help-modal-bg').classList.add('show'); }
+function closeHelp() { document.getElementById('help-modal-bg').classList.remove('show'); }
+
+// =====================================================
+// COLOR (left panel, foto actual)
+// =====================================================
+function livePreview() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  const tempSlot = { ...slot,
+    brightness: parseInt(document.getElementById('s-brightness').value),
+    contrast: parseInt(document.getElementById('s-contrast').value),
+    saturation: parseInt(document.getElementById('s-saturation').value),
+    warmth: parseInt(document.getElementById('s-warmth').value)
+  };
+  cropImgEl.style.filter = buildFilter(tempSlot);
+}
+function updateSliderVal(k) { document.getElementById('v-' + k).textContent = document.getElementById('s-' + k).value; }
+function applyColorToSelected() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  slot.brightness = parseInt(document.getElementById('s-brightness').value);
+  slot.contrast = parseInt(document.getElementById('s-contrast').value);
+  slot.saturation = parseInt(document.getElementById('s-saturation').value);
+  slot.warmth = parseInt(document.getElementById('s-warmth').value);
+  refreshCroppedColor(slot);
+  renderPhotoList();
+  updateCroppedList();
+  toast('Color aplicado', 'success');
+}
+
+// Auto-improve: normalize brightness/contrast so avg luminance ~128 and contrast is centered
+function autoImproveCurrentPhoto() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  // Need a cropped photo to work on
+  if (!slot.croppedCanvasOriginal) { toast('Confirma el recorte primero', 'error'); return; }
+
+  const src = slot.croppedCanvasOriginal;
+  // Analyze luminance
+  const small = document.createElement('canvas');
+  const W = 80, H = Math.max(1, Math.round(80 * src.height / src.width));
+  small.width = W; small.height = H;
+  small.getContext('2d').drawImage(src, 0, 0, W, H);
+  const sData = small.getContext('2d').getImageData(0, 0, W, H).data;
+  let sumL = 0, count = 0;
+  for (let i = 0; i < sData.length; i += 4) {
+    sumL += 0.299 * sData[i] + 0.587 * sData[i+1] + 0.114 * sData[i+2];
+    count++;
+  }
+  const meanL = sumL / count;
+
+  // Calculate screen blend amount based on how dark the photo is
+  // Target: gently lift to ~105 mean luminance
+  // Amount = how much to blend toward white (0 = nothing, 0.05 = subtle)
+  let amount = (105 - meanL) / 600; // Very gentle
+  amount = Math.max(0, Math.min(0.06, amount)); // Cap at 6%
+  if (amount < 0.005) { toast('La foto ya tiene buen brillo', 'info'); return; }
+
+  // Apply PIXEL-LEVEL screen blend to the FULL image — same as the brush
+  // Formula: new = old + (255 - old) * amount
+  // This preserves color ratios perfectly — no paleness, no saturation change
+  const out = document.createElement('canvas');
+  out.width = src.width; out.height = src.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  const imgData = ctx.getImageData(0, 0, out.width, out.height);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i]   = Math.min(255, Math.round(d[i]   + (255 - d[i])   * amount));
+    d[i+1] = Math.min(255, Math.round(d[i+1] + (255 - d[i+1]) * amount));
+    d[i+2] = Math.min(255, Math.round(d[i+2] + (255 - d[i+2]) * amount));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Replace the original with the improved version
+  slot.croppedCanvasOriginal = out;
+  slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
+  invalidateThumb(slot);
+  slot._colorImgUrl = null;
+
+  // DON'T change CSS filter sliders — the improvement is baked into the pixels
+  renderPhotoList();
+  updateCroppedList();
+  toast(`✨ Aclarado aplicado (${(amount * 100).toFixed(1)}%)`, 'success');
+}
+
+
+// =====================================================
+// COLOR MATCHING SECTION (by mosaic row)
+// =====================================================
+function renderColorTabs() {
+  const tabs = document.getElementById('color-tabs');
+  tabs.innerHTML = '';
+  COLOR_ROWS.forEach(cr => {
+    const btn = document.createElement('button');
+    btn.className = 'color-tab' + (cr.id === currentColorRow ? ' active' : '');
+    const count = slotsInColorRow(cr.id).length;
+    btn.innerHTML = `${cr.icon} ${cr.name} <span class="count">${count}</span>`;
+    btn.onclick = () => {
+      currentColorRow = cr.id;
+      colorSelectedIds.clear();
+      renderColorTabs();
+      renderColorGrid();
+      updateSlidersFromSelection();
+    };
+    tabs.appendChild(btn);
+  });
+}
+
+function renderColorGrid() {
+  const area = document.getElementById('color-grid-area');
+  const photos = slotsInColorRow(currentColorRow);
+  if (!photos.length) {
+    area.innerHTML = '<div class="color-empty"><div class="icon">🖼️</div><div style="font-size:14px;color:var(--text)">No hay fotos recortadas en esta fila</div><div style="font-size:12px;margin-top:6px">Ve a "① Recorte" y confirma fotos primero</div></div>';
+    document.getElementById('selection-count').textContent = '0 seleccionadas';
+    return;
+  }
+  let cols = photos.length;
+  if (cols === 1) cols = 2;
+  if (cols > 4) cols = 4;
+  area.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'color-grid cols-' + cols;
+  photos.forEach(slot => grid.appendChild(buildColorCard(slot)));
+  area.appendChild(grid);
+  updateSelectionCount();
+}
+
+function buildColorCard(slot) {
+  const card = document.createElement('div');
+  card.className = 'color-card';
+  if (colorSelectedIds.has(slot.id)) card.classList.add('selected');
+  if (slot.isColorRef) card.classList.add('is-ref');
+  if (allOriginalShown) card.classList.add('show-original');
+  card.dataset.slotId = slot.id;
+
+  card.onclick = e => {
+    if (e.target.closest('.card-mini-btn') || e.target.closest('.compare-toggle')) return;
+    toggleColorSelection(slot.id);
+  };
+
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'color-card-img-wrap';
+  const img = document.createElement('img');
+  img.className = 'color-card-img';
+  // Cache the original as data URL once
+  if (!slot._colorImgUrl) {
+    slot._colorImgUrl = slot.croppedCanvasOriginal.toDataURL('image/jpeg', .78);
+  }
+  img.src = slot._colorImgUrl;
+  img.style.filter = buildFilter(slot);
+  imgWrap.appendChild(img);
+
+  const compareBtn = document.createElement('button');
+  compareBtn.className = 'compare-toggle';
+  compareBtn.textContent = '👁 Original';
+  compareBtn.onmousedown = () => card.classList.add('show-original');
+  compareBtn.onmouseup = () => { if (!allOriginalShown) card.classList.remove('show-original'); };
+  compareBtn.onmouseleave = () => { if (!allOriginalShown) card.classList.remove('show-original'); };
+  imgWrap.appendChild(compareBtn);
+
+  card.appendChild(imgWrap);
+
+  const info = document.createElement('div');
+  info.className = 'color-card-info';
+  const nameWrap = document.createElement('div');
+  nameWrap.style.cssText = 'flex:1;min-width:0;';
+  const name = document.createElement('div');
+  name.className = 'color-card-name';
+  name.textContent = slot.name;
+  nameWrap.appendChild(name);
+  const vals = document.createElement('div');
+  vals.className = 'color-card-vals';
+  vals.textContent = `B${slot.brightness} C${slot.contrast} S${slot.saturation} T${slot.warmth}`;
+  nameWrap.appendChild(vals);
+  info.appendChild(nameWrap);
+
+  const acts = document.createElement('div');
+  acts.className = 'color-card-actions';
+  const refBtn = document.createElement('button');
+  refBtn.className = 'card-mini-btn' + (slot.isColorRef ? ' ref-btn' : '');
+  refBtn.textContent = '🎨';
+  refBtn.title = 'Marcar como referencia';
+  refBtn.onclick = e => { e.stopPropagation(); setColorReference(slot.id); };
+  acts.appendChild(refBtn);
+  // Rotate buttons for straightening
+  const rotLBtn = document.createElement('button');
+  rotLBtn.className = 'card-mini-btn';
+  rotLBtn.textContent = '↺';
+  rotLBtn.title = 'Girar -1°';
+  rotLBtn.onclick = e => { e.stopPropagation(); rotateColorCard(slot, -1); };
+  acts.appendChild(rotLBtn);
+  const rotRBtn = document.createElement('button');
+  rotRBtn.className = 'card-mini-btn';
+  rotRBtn.textContent = '↻';
+  rotRBtn.title = 'Girar +1°';
+  rotRBtn.onclick = e => { e.stopPropagation(); rotateColorCard(slot, 1); };
+  acts.appendChild(rotRBtn);
+  // Brush lighten button
+  const brushBtn = document.createElement('button');
+  brushBtn.className = 'card-mini-btn';
+  brushBtn.textContent = '🖌';
+  brushBtn.title = 'Aclarar zonas';
+  brushBtn.onclick = e => { e.stopPropagation(); openBrushTool(slot.id); };
+  acts.appendChild(brushBtn);
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'card-mini-btn reset-btn';
+  resetBtn.textContent = '⟲';
+  resetBtn.title = 'Reset color';
+  resetBtn.onclick = e => {
+    e.stopPropagation();
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    refreshCroppedColor(slot);
+    updateSingleCardVisual(slot);
+    updateSlidersFromSelection();
+    updateCroppedList();
+  };
+  acts.appendChild(resetBtn);
+  info.appendChild(acts);
+
+  card.appendChild(info);
+  return card;
+}
+
+// Rotate a cropped photo from the Color view
+function rotateColorCard(slot, degrees) {
+  if (!slot.croppedCanvasOriginal) return;
+  const src = slot.croppedCanvasOriginal;
+  const rad = degrees * Math.PI / 180;
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+  const nw = Math.ceil(src.width * cos + src.height * sin);
+  const nh = Math.ceil(src.width * sin + src.height * cos);
+  const out = document.createElement('canvas');
+  out.width = nw; out.height = nh;
+  const ctx = out.getContext('2d');
+  ctx.translate(nw / 2, nh / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(src, -src.width / 2, -src.height / 2);
+  slot.croppedCanvasOriginal = out;
+  slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
+  invalidateThumb(slot);
+  slot._colorImgUrl = null;
+  renderColorGrid();
+  updateCroppedList();
+  toast(`↻ ${slot.name} girada ${degrees}°`, 'info');
+}
+
+// Update ONLY the affected card visual, not entire grid (faster)
+function updateSingleCardVisual(slot) {
+  const card = document.querySelector(`.color-card[data-slot-id="${slot.id}"]`);
+  if (!card) return;
+  const img = card.querySelector('.color-card-img');
+  if (img) img.style.filter = buildFilter(slot);
+  const vals = card.querySelector('.color-card-vals');
+  if (vals) vals.textContent = `B${slot.brightness} C${slot.contrast} S${slot.saturation} T${slot.warmth}`;
+}
+
+function toggleColorSelection(id) {
+  const card = document.querySelector(`.color-card[data-slot-id="${id}"]`);
+  if (colorSelectedIds.has(id)) {
+    colorSelectedIds.delete(id);
+    card?.classList.remove('selected');
+  } else {
+    colorSelectedIds.add(id);
+    card?.classList.add('selected');
+  }
+  updateSelectionCount();
+  updateSlidersFromSelection();
+}
+
+function updateSlidersFromSelection() {
+  const ids = ['brightness', 'contrast', 'saturation', 'warmth'];
+  const sliders = ids.map(k => document.getElementById('cs-' + k));
+  const labels = ids.map(k => document.getElementById('cv-' + k));
+
+  if (colorSelectedIds.size === 0) {
+    sliders.forEach(s => s.disabled = true);
+    labels.forEach(l => l.textContent = '—');
+    return;
+  }
+  sliders.forEach(s => s.disabled = false);
+
+  const arr = [...colorSelectedIds].map(id => slots.find(s => s.id === id)).filter(Boolean);
+  if (arr.length === 1) {
+    const s = arr[0];
+    document.getElementById('cs-brightness').value = s.brightness;
+    document.getElementById('cs-contrast').value = s.contrast;
+    document.getElementById('cs-saturation').value = s.saturation;
+    document.getElementById('cs-warmth').value = s.warmth;
+    document.getElementById('cv-brightness').textContent = s.brightness;
+    document.getElementById('cv-contrast').textContent = s.contrast;
+    document.getElementById('cv-saturation').textContent = s.saturation;
+    document.getElementById('cv-warmth').textContent = s.warmth;
+  } else {
+    ids.forEach(k => {
+      const same = arr.every(s => s[k] === arr[0][k]);
+      const avg = Math.round(arr.reduce((a, s) => a + s[k], 0) / arr.length);
+      document.getElementById('cs-' + k).value = avg;
+      document.getElementById('cv-' + k).textContent = same ? arr[0][k] : (avg + ' (~)');
+    });
+  }
+}
+
+function selectAllInGroup() {
+  slotsInColorRow(currentColorRow).forEach(s => colorSelectedIds.add(s.id));
+  document.querySelectorAll('.color-card').forEach(c => c.classList.add('selected'));
+  updateSelectionCount();
+  updateSlidersFromSelection();
+}
+function deselectAll() {
+  colorSelectedIds.clear();
+  document.querySelectorAll('.color-card.selected').forEach(c => c.classList.remove('selected'));
+  updateSelectionCount();
+  updateSlidersFromSelection();
+}
+function updateSelectionCount() {
+  document.getElementById('selection-count').textContent = colorSelectedIds.size + ' seleccionada(s)';
+}
+
+function setColorReference(slotId) {
+  const slot = slots.find(s => s.id === slotId);
+  if (!slot) return;
+  slots.forEach(s => { if (s.colorRow === slot.colorRow) s.isColorRef = false; });
+  slot.isColorRef = true;
+  computeColorStats(slot);
+  renderColorGrid();
+  renderPhotoList();
+  toast(`🎨 "${slot.name}" es referencia`, 'info');
+}
+
+function computeColorStats(slot) {
+  const c = slot.croppedCanvas;
+  if (!c) return;
+  const small = document.createElement('canvas');
+  const W = 60, H = Math.max(1, Math.round(60 * c.height / c.width));
+  small.width = W; small.height = H;
+  const sctx = small.getContext('2d');
+  sctx.drawImage(c, 0, 0, W, H);
+  const data = sctx.getImageData(0, 0, W, H).data;
+  let sumL = 0, sumR = 0, sumG = 0, sumB = 0, count = 0;
+  let minL = 255, maxL = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    sumL += lum; sumR += r; sumG += g; sumB += b;
+    if (lum < minL) minL = lum;
+    if (lum > maxL) maxL = lum;
+    count++;
+  }
+  slot.colorStats = {
+    meanL: sumL / count, meanR: sumR / count, meanG: sumG / count, meanB: sumB / count,
+    contrast: maxL - minL
+  };
+}
+
+// Debounced slider handler for smooth performance
+let colorSliderRAF = null;
+function onColorSlider(key) {
+  const v = parseFloat(document.getElementById('cs-' + key).value);
+  document.getElementById('cv-' + key).textContent = v;
+  if (colorSelectedIds.size === 0) return;
+  if (colorSliderRAF) cancelAnimationFrame(colorSliderRAF);
+  colorSliderRAF = requestAnimationFrame(() => {
+    colorSelectedIds.forEach(id => {
+      const slot = slots.find(s => s.id === id);
+      if (!slot) return;
+      slot[key] = v;
+      // Cheap update: only change CSS filter on the visible <img>
+      updateSingleCardVisual(slot);
+    });
+  });
+}
+
+// When user releases a slider, actually re-render the cropped canvas (expensive)
+['cs-brightness', 'cs-contrast', 'cs-saturation', 'cs-warmth'].forEach(id => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', () => {
+      colorSelectedIds.forEach(sid => {
+        const slot = slots.find(s => s.id === sid);
+        if (!slot) return;
+        refreshCroppedColor(slot);
+      });
+      updateCroppedList();
+    });
+  });
+});
+
+function resetSelectedColors() {
+  if (colorSelectedIds.size === 0) { toast('Selecciona fotos primero', 'error'); return; }
+  colorSelectedIds.forEach(id => {
+    const slot = slots.find(s => s.id === id);
+    if (!slot) return;
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    refreshCroppedColor(slot);
+    updateSingleCardVisual(slot);
+  });
+  updateSlidersFromSelection();
+  updateCroppedList();
+  toast('Color reseteado', 'success');
+}
+
+// CONSERVATIVE auto-match algorithm
+function autoMatchSelected() {
+  if (colorSelectedIds.size === 0) { toast('Selecciona las fotos a igualar', 'error'); return; }
+  const ref = getColorRef(currentColorRow);
+  if (!ref) { toast('Marca primero una foto como 🎨 referencia (botón 🎨 en la tarjeta)', 'error'); return; }
+  if (!ref.colorStats) computeColorStats(ref);
+
+  let matched = 0;
+  colorSelectedIds.forEach(id => {
+    if (id === ref.id) return;
+    const target = slots.find(s => s.id === id);
+    if (!target || !target.croppedCanvasOriginal) return;
+    matchSlotToReferenceConservative(target, ref);
+    matched++;
+  });
+  colorSelectedIds.forEach(id => {
+    const slot = slots.find(s => s.id === id);
+    if (slot) updateSingleCardVisual(slot);
+  });
+  updateSlidersFromSelection();
+  updateCroppedList();
+  toast(`✨ ${matched} foto(s) ajustadas sutilmente`, 'success');
+}
+
+function matchSlotToReferenceConservative(target, ref) {
+  const c = target.croppedCanvasOriginal;
+  const W = 60, H = Math.max(1, Math.round(60 * c.height / c.width));
+  const small = document.createElement('canvas');
+  small.width = W; small.height = H;
+  const sctx = small.getContext('2d');
+  sctx.drawImage(c, 0, 0, W, H);
+  const data = sctx.getImageData(0, 0, W, H).data;
+  let sumL = 0, sumR = 0, sumG = 0, sumB = 0, count = 0;
+  let minL = 255, maxL = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    sumL += lum; sumR += r; sumG += g; sumB += b;
+    if (lum < minL) minL = lum;
+    if (lum > maxL) maxL = lum;
+    count++;
+  }
+  const tMeanL = sumL / count, tMeanR = sumR / count, tMeanG = sumG / count, tMeanB = sumB / count;
+  const tContrast = maxL - minL;
+  const r = ref.colorStats;
+
+  // Very conservative dampening — sqrt style (values closer to 100)
+  const dampen = ratio => {
+    if (ratio <= 0) return 100;
+    return 100 * Math.pow(ratio, 0.35);
+  };
+
+  let brightness = dampen(r.meanL / Math.max(1, tMeanL));
+  brightness = Math.max(85, Math.min(118, brightness));
+
+  let contrast = dampen(r.contrast / Math.max(20, tContrast));
+  contrast = Math.max(90, Math.min(112, contrast));
+
+  const tSat = Math.max(tMeanR, tMeanG, tMeanB) - Math.min(tMeanR, tMeanG, tMeanB);
+  const rSat = Math.max(r.meanR, r.meanG, r.meanB) - Math.min(r.meanR, r.meanG, r.meanB);
+  let saturation = dampen(rSat / Math.max(8, tSat));
+  saturation = Math.max(92, Math.min(108, saturation));
+
+  const tW = tMeanR - tMeanB;
+  const rW = r.meanR - r.meanB;
+  let warmth = (rW - tW) * 0.12;
+  warmth = Math.max(-8, Math.min(8, warmth));
+
+  target.brightness = Math.round(brightness);
+  target.contrast = Math.round(contrast);
+  target.saturation = Math.round(saturation);
+  target.warmth = Math.round(warmth);
+  refreshCroppedColor(target);
+}
+
+function toggleAllOriginal() {
+  allOriginalShown = !allOriginalShown;
+  document.querySelectorAll('.color-card').forEach(c => c.classList.toggle('show-original', allOriginalShown));
+  document.getElementById('btn-toggle-original').textContent = allOriginalShown ? '👁 Ver editadas' : '👁 Ver originales';
+}
+
+
+// =====================================================
+// LOGO
+// =====================================================
+function loadLogo(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => { logoImg = img; };
+    img.src = e.target.result;
+    document.getElementById('logo-preview').src = e.target.result;
+    document.getElementById('logo-preview').style.display = 'block';
+    const hl = document.getElementById('header-logo');
+    hl.style.background = `#fff url(${e.target.result}) center/contain no-repeat`;
+    hl.textContent = '';
+    toast('Logo cargado', 'success');
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// =====================================================
+// CROPPED LIST (right panel) — uses cached thumbs
+// =====================================================
+function updateCroppedList() {
+  const list = document.getElementById('cropped-list');
+  list.innerHTML = '';
+  getAllSlots().forEach(slot => {
+    if (!slot.croppedCanvas) return;
+    // Invalidate the small color-panel cache too so it reflects current state
+    slot._colorImgUrl = null;
+    const div = document.createElement('div');
+    div.className = 'cropped-item';
+    const img = document.createElement('img');
+    // Get a small thumbnail (128px wide) — much cheaper than full
+    const tc = document.createElement('canvas');
+    const w = 128, h = Math.max(1, Math.round(128 * slot.croppedCanvas.height / slot.croppedCanvas.width));
+    tc.width = w; tc.height = h;
+    tc.getContext('2d').drawImage(slot.croppedCanvas, 0, 0, w, h);
+    img.src = tc.toDataURL('image/jpeg', .7);
+    const lbl = document.createElement('div');
+    lbl.className = 'cropped-item-label';
+    lbl.textContent = slot.name;
+    div.appendChild(img); div.appendChild(lbl);
+    list.appendChild(div);
+  });
+  if (!list.children.length) {
+    list.innerHTML = '<div style="padding:20px 10px; text-align:center; color:var(--text2); font-size:11px;">Las fotos confirmadas aparecerán aquí</div>';
+  }
+}
+
+// =====================================================
+// VIEW SWITCH
+// =====================================================
+function switchView(view) {
+  document.getElementById('crop-section').classList.toggle('visible', view === 'crop');
+  document.getElementById('color-section').classList.toggle('visible', view === 'color');
+  document.getElementById('mosaic-section').classList.toggle('visible', view === 'mosaic');
+  document.getElementById('btn-step-crop').classList.toggle('active', view === 'crop');
+  document.getElementById('btn-step-color').classList.toggle('active', view === 'color');
+  document.getElementById('btn-step-mosaic').classList.toggle('active', view === 'mosaic');
+  document.getElementById('crop-toolbar').style.display = (view === 'crop') ? 'flex' : 'none';
+  document.getElementById('crop-color-panel').style.display = (view === 'crop') ? 'block' : 'none';
+  if (view === 'color') {
+    renderColorTabs();
+    renderColorGrid();
+    updateSlidersFromSelection();
+  }
+  if (view === 'mosaic') generateMosaic();
+}
+
+// =====================================================
+// MOSAIC A4
+// =====================================================
+const A4_W = 1654, A4_H = 2339;
+
+function generateMosaic() {
+  const required = slots.filter(s => !s.optional);
+  const loaded = required.filter(s => s.croppedCanvas);
+  const missing = required.filter(s => !s.croppedCanvas);
+  if (!loaded.length) { toast('Confirma al menos una foto', 'error'); return; }
+  if (missing.length > 0) {
+    const names = missing.map(s => s.name).join(', ');
+    toast(`⚠ Faltan ${missing.length}: ${names}`, 'info');
+  }
+  document.getElementById('mosaic-section').classList.add('visible');
+  drawMosaic();
+}
+function resetMosaicOffsets() { mosaicOffsets = {}; drawMosaic(); toast('Ajustes reseteados', 'success'); }
+function getMosaicAdjust(slotId) {
+  if (!mosaicOffsets[slotId]) mosaicOffsets[slotId] = { yOffset: 0, xOffset: 0, scale: 1 };
+  // Legacy: if it was a plain number, convert
+  if (typeof mosaicOffsets[slotId] === 'number') mosaicOffsets[slotId] = { yOffset: mosaicOffsets[slotId], xOffset: 0, scale: 1 };
+  return mosaicOffsets[slotId];
+}
+
+function drawMosaic() {
+  const canvas = document.getElementById('mosaic-canvas-el');
+  canvas.width = A4_W; canvas.height = A4_H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, A4_W, A4_H);
+  const HEADER_H = 110;
+  ctx.fillStyle = '#1a2540';
+  ctx.fillRect(0, 0, A4_W, HEADER_H);
+  if (logoImg) {
+    const lh = 70, lw = logoImg.width * (lh / logoImg.height);
+    ctx.drawImage(logoImg, 30, 20, lw, lh);
+  } else {
+    ctx.fillStyle = '#4f8ef7';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('FOURDEN', 30, 65);
+  }
+  const name = document.getElementById('patient-name').value || 'Paciente';
+  const dob = document.getElementById('patient-dob').value;
+  const date = document.getElementById('patient-date').value;
+  const fmt = d => d ? d.split('-').reverse().join('/') : '—';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(name.toUpperCase(), A4_W / 2, 50);
+  ctx.font = '15px sans-serif';
+  ctx.fillStyle = '#a0b0d0';
+  ctx.fillText('F. Nacimiento: ' + fmt(dob) + '   ·   Exploración: ' + fmt(date), A4_W / 2, 80);
+  ctx.textAlign = 'left';
+
+  const PAD = 14;
+  const AREA_Y = HEADER_H + PAD;
+  const BOTTOM_RESERVE = 40;
+  const AREA_H = A4_H - AREA_Y - BOTTOM_RESERVE;
+  const weights = [1.10, 0.75, 0.95, 0.75, 0.50];
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  const usableH = AREA_H - PAD * 4;
+  const rowHeights = weights.map(w => usableH * (w / totalW));
+  let curY = AREA_Y;
+  const rowDef = [
+    { ids: ['frontal_reposo', 'frontal_sonrisa', 'perfil_der', 'semiperfil'] },
+    { ids: ['lateral_der_ocl', 'frontal_ocl', 'lateral_izq_ocl'] },
+    { ids: ['oclusal_sup', 'oclusal_inf'] },
+    { ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
+    { ids: ['labios_reposo', 'labios_sonrisa'] },
+  ];
+  rowDef.forEach((r, i) => { r.y = curY; r.h = rowHeights[i]; curY += rowHeights[i] + PAD; });
+
+  mosaicLayoutData = [];
+  rowDef.forEach(r => drawRow(ctx, r.ids, r.y, r.h, A4_W, PAD));
+  setTimeout(updateMosaicOverlay, 60);
+}
+
+function drawRow(ctx, slotIds, y, rowH, totalW, pad) {
+  const slotMap = {};
+  slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
+  const present = slotIds.map(id => slotMap[id]).filter(Boolean);
+  if (!present.length) return;
+  const cellWidths = present.map(s => rowH * s.ratio);
+  const totalCellW = cellWidths.reduce((a, b) => a + b, 0) + pad * (present.length - 1);
+  let x = (totalW - totalCellW) / 2;
+  present.forEach((slot, i) => {
+    const cw = cellWidths[i];
+    const adj = getMosaicAdjust(slot.id);
+    drawImageInCell(ctx, slot.croppedCanvas, x, y, cw, rowH, adj);
+    mosaicLayoutData.push({ slotId: slot.id, x, y, w: cw, h: rowH });
+    x += cw + pad;
+  });
+}
+
+function drawImageInCell(ctx, img, x, y, w, h, adj) {
+  const yOffset = (adj && adj.yOffset) || 0;
+  const xOffset = (adj && adj.xOffset) || 0;
+  const scale = (adj && adj.scale) || 1;
+  ctx.fillStyle = '#f5f7fa';
+  ctx.fillRect(x, y, w, h);
+  const ir = img.width / img.height;
+  const cr = w / h;
+  let dx, dy, dw, dh;
+  if (Math.abs(ir - cr) < 0.02) { dw = w * scale; dh = h * scale; dx = x + (w - dw)/2 + xOffset; dy = y + (h - dh)/2 + yOffset; }
+  else if (ir > cr) { dh = h * scale; dw = dh * ir; dx = x + (w - dw)/2 + xOffset; dy = y + (h - dh)/2 + yOffset; }
+  else { dw = w * scale; dh = dw / ir; dx = x + (w - dw)/2 + xOffset; dy = y + (h - dh)/2 + yOffset; }
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  ctx.strokeStyle = '#dde2ef';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+}
+
+function updateMosaicOverlay() {
+  const overlay = document.getElementById('mosaic-overlay');
+  overlay.innerHTML = '';
+  const canvas = document.getElementById('mosaic-canvas-el');
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width / A4_W;
+  const sy = rect.height / A4_H;
+  if (!mosaicLayoutData) return;
+  mosaicLayoutData.forEach(data => {
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-handle-overlay';
+    wrap.style.left = (data.x * sx) + 'px';
+    wrap.style.top = (data.y * sy) + 'px';
+    wrap.style.width = (data.w * sx) + 'px';
+    wrap.style.height = (data.h * sy) + 'px';
+    wrap.dataset.slotId = data.slotId;
+
+    // Drag body — moves the photo (both X and Y)
+    wrap.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('mos-handle')) return;
+      e.preventDefault();
+      wrap.classList.add('editing');
+      const startX = e.clientX, startY = e.clientY;
+      const slotId = data.slotId;
+      const adj = getMosaicAdjust(slotId);
+      const startX0 = adj.xOffset, startY0 = adj.yOffset;
+      const onMove = ev => {
+        const dx = (ev.clientX - startX) / sx;
+        const dy = (ev.clientY - startY) / sy;
+        adj.xOffset = startX0 + dx;
+        adj.yOffset = startY0 + dy;
+        drawMosaicQuick();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        wrap.classList.remove('editing');
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // 4 corner handles for scale
+    ['tl','tr','bl','br'].forEach(pos => {
+      const h = document.createElement('div');
+      h.className = 'mos-handle mos-handle-' + pos;
+      h.dataset.pos = pos;
+      h.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        wrap.classList.add('editing');
+        const startX = e.clientX, startY = e.clientY;
+        const slotId = data.slotId;
+        const adj = getMosaicAdjust(slotId);
+        const startScale = adj.scale;
+        // Use diagonal distance from center for scale change
+        const cx = data.x + data.w/2;
+        const cy = data.y + data.h/2;
+        const rectC = canvas.getBoundingClientRect();
+        const canvasStartX = (startX - rectC.left) / sx;
+        const canvasStartY = (startY - rectC.top) / sy;
+        const startDist = Math.hypot(canvasStartX - cx, canvasStartY - cy);
+        const onMove = ev => {
+          const cxNow = (ev.clientX - rectC.left) / sx;
+          const cyNow = (ev.clientY - rectC.top) / sy;
+          const nowDist = Math.hypot(cxNow - cx, cyNow - cy);
+          const newScale = startScale * (nowDist / Math.max(10, startDist));
+          adj.scale = Math.max(0.5, Math.min(3, newScale));
+          drawMosaicQuick();
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          wrap.classList.remove('editing');
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      wrap.appendChild(h);
+    });
+
+    overlay.appendChild(wrap);
+  });
+}
+
+let drawDebounce = null;
+function drawMosaicQuick() {
+  if (drawDebounce) cancelAnimationFrame(drawDebounce);
+  drawDebounce = requestAnimationFrame(() => drawMosaic());
+}
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('mosaic-section').classList.contains('visible')) {
+    setTimeout(updateMosaicOverlay, 100);
+  }
+});
+
+function downloadMosaic() {
+  const canvas = document.getElementById('mosaic-canvas-el');
+  const name = (document.getElementById('patient-name').value.trim().replace(/\s+/g, '_') || 'paciente');
+  const date = (document.getElementById('patient-date').value.replace(/-/g, '') || 'sin_fecha');
+  const link = document.createElement('a');
+  link.download = `Mosaico_A4_${name}_${date}.jpg`;
+  link.href = canvas.toDataURL('image/jpeg', .95);
+  link.click();
+  toast('Descargando mosaico A4', 'success');
+}
+async function downloadAllCropped() {
+  const all = getAllSlots().filter(s => s.croppedCanvas);
+  if (!all.length) { toast('No hay fotos recortadas', 'error'); return; }
+  // Check if required photos are missing
+  const required = slots.filter(s => !s.optional);
+  const missing = required.filter(s => !s.croppedCanvas);
+  if (missing.length > 0) {
+    const names = missing.map(s => s.name).join(', ');
+    if (!confirm(`Faltan ${missing.length} fotos: ${names}\n\n¿Descargar ZIP con las que hay?`)) return;
+  }
+  const name = (document.getElementById('patient-name').value.trim().replace(/\s+/g, '_') || 'paciente');
+  const date = (document.getElementById('patient-date').value.replace(/-/g, '') || 'sin_fecha');
+
+  if (typeof JSZip === 'undefined') {
+    toast('JSZip no disponible, descargando una a una', 'info');
+    all.forEach((slot, i) => setTimeout(() => {
+      const link = document.createElement('a');
+      link.download = `${name}_${slot.id}.jpg`;
+      link.href = slot.croppedCanvas.toDataURL('image/jpeg', .95);
+      link.click();
+    }, i * 250));
+    return;
+  }
+
+  toast('Generando ZIP optimizado para email...', 'info');
+  const zip = new JSZip();
+  const folder = zip.folder(`${name}_${date}`);
+
+  // Add each cropped photo — optimized for email (<2MB each)
+  // Resize to max 2400px on longest side, JPEG 92% — visually lossless, ~300-800KB each
+  for (const slot of all) {
+    const src = slot.croppedCanvas;
+    let outCanvas = src;
+    const maxDim = 2400;
+    if (src.width > maxDim || src.height > maxDim) {
+      const scale = maxDim / Math.max(src.width, src.height);
+      outCanvas = document.createElement('canvas');
+      outCanvas.width = Math.round(src.width * scale);
+      outCanvas.height = Math.round(src.height * scale);
+      outCanvas.getContext('2d').drawImage(src, 0, 0, outCanvas.width, outCanvas.height);
+    }
+    const dataUrl = outCanvas.toDataURL('image/jpeg', .92);
+    const base64 = dataUrl.split(',')[1];
+    const fname = slot.name.replace(/[^A-Z0-9 ]/gi, '').replace(/\s+/g, '_').trim();
+    folder.file(`${fname}.jpg`, base64, { base64: true });
+  }
+
+  // Mosaic: HIGH quality for printing (A4 at 200dpi = 1654x2339)
+  const mosaicCanvas = document.getElementById('mosaic-canvas-el');
+  if (mosaicCanvas && mosaicCanvas.width > 100) {
+    // Generate mosaic fresh at full resolution before saving
+    drawMosaic();
+    const mosaicUrl = mosaicCanvas.toDataURL('image/jpeg', .97);
+    folder.file(`MOSAICO_${name}_${date}.jpg`, mosaicUrl.split(',')[1], { base64: true });
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = `Fotos_${name}_${date}.zip`;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast(`✓ ZIP con ${all.length} fotos descargado`, 'success');
+}
+
+// =====================================================
+// BRUSH TOOL — pixel-level "aclarado" (same as Photoscape)
+// Hard circle, no re-lightening per stroke, visible cursor
+// =====================================================
+let brushHistory = [];
+let brushSlotId = null;
+let brushMask = null;
+
+function openBrushTool(slotId) {
+  const slot = slots.find(s => s.id === slotId) || extraSlots.find(s => s.id === slotId);
+  if (!slot || !slot.croppedCanvasOriginal) { toast('No hay foto recortada', 'error'); return; }
+  brushSlotId = slotId;
+  brushHistory = [];
+  brushMask = null;
+  const bc = document.getElementById('brush-canvas');
+  const src = slot.croppedCanvasOriginal;
+  bc.width = src.width; bc.height = src.height;
+  bc.getContext('2d').drawImage(src, 0, 0);
+  brushHistory.push(bc.getContext('2d').getImageData(0, 0, bc.width, bc.height));
+  document.getElementById('brush-size').value = 100;
+  document.getElementById('brush-size-val').textContent = '100px';
+  document.getElementById('brush-opacity').value = 5;
+  document.getElementById('brush-opacity-val').textContent = '5%';
+  const cursor = document.getElementById('brush-cursor');
+  let painting = false;
+  const updateCursor = e => {
+    const rect = bc.getBoundingClientRect();
+    const size = parseInt(document.getElementById('brush-size').value);
+    const ds = size / (bc.width / rect.width);
+    cursor.style.width = ds + 'px'; cursor.style.height = ds + 'px';
+    cursor.style.left = (e.clientX - rect.left - ds/2) + 'px';
+    cursor.style.top = (e.clientY - rect.top - ds/2) + 'px';
+    cursor.style.display = 'block';
+  };
+  bc.onmouseenter = e => updateCursor(e);
+  bc.onmouseleave = () => { cursor.style.display = 'none'; if (painting) { painting = false; brushMask = null; brushSaveState(); } };
+  bc.onmousemove = e => { updateCursor(e); if (painting) brushStroke(e); };
+  bc.onmousedown = e => { painting = true; brushMask = new Uint8Array(bc.width * bc.height); brushStroke(e); };
+  bc.onmouseup = () => { painting = false; brushMask = null; brushSaveState(); };
+  bc.ontouchstart = e => { e.preventDefault(); painting = true; brushMask = new Uint8Array(bc.width * bc.height); brushStroke(e.touches[0]); };
+  bc.ontouchmove = e => { e.preventDefault(); if (painting) brushStroke(e.touches[0]); };
+  bc.ontouchend = () => { painting = false; brushMask = null; brushSaveState(); };
+  document.getElementById('brush-modal').classList.add('show');
+}
+
+function brushStroke(e) {
+  const bc = document.getElementById('brush-canvas');
+  const ctx = bc.getContext('2d');
+  const rect = bc.getBoundingClientRect();
+  const sx = bc.width / rect.width, sy = bc.height / rect.height;
+  const cx = (e.clientX - rect.left) * sx, cy = (e.clientY - rect.top) * sy;
+  const radius = parseInt(document.getElementById('brush-size').value) / 2;
+  const strength = parseInt(document.getElementById('brush-opacity').value) / 100;
+  const x0 = Math.max(0, Math.floor(cx - radius)), y0 = Math.max(0, Math.floor(cy - radius));
+  const x1 = Math.min(bc.width, Math.ceil(cx + radius)), y1 = Math.min(bc.height, Math.ceil(cy + radius));
+  const w = x1 - x0, h = y1 - y0;
+  if (w <= 0 || h <= 0) return;
+  const imgData = ctx.getImageData(x0, y0, w, h);
+  const d = imgData.data;
+  const r2 = radius * radius;
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const ax = x0 + px, ay = y0 + py;
+      if ((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) > r2) continue;
+      const mi = ay * bc.width + ax;
+      if (brushMask && brushMask[mi]) continue;
+      if (brushMask) brushMask[mi] = 1;
+      const i = (py * w + px) * 4;
+      d[i]   = Math.min(255, Math.round(d[i]   + (255 - d[i])   * strength));
+      d[i+1] = Math.min(255, Math.round(d[i+1] + (255 - d[i+1]) * strength));
+      d[i+2] = Math.min(255, Math.round(d[i+2] + (255 - d[i+2]) * strength));
+    }
+  }
+  ctx.putImageData(imgData, x0, y0);
+}
+
+function brushSaveState() {
+  const bc = document.getElementById('brush-canvas');
+  if (brushHistory.length > 20) brushHistory.shift();
+  brushHistory.push(bc.getContext('2d').getImageData(0, 0, bc.width, bc.height));
+}
+function brushUndo() {
+  if (brushHistory.length <= 1) { toast('Nada que deshacer', 'info'); return; }
+  brushHistory.pop();
+  document.getElementById('brush-canvas').getContext('2d').putImageData(brushHistory[brushHistory.length - 1], 0, 0);
+}
+function brushCancel() {
+  document.getElementById('brush-modal').classList.remove('show');
+  const bc = document.getElementById('brush-canvas');
+  bc.onmousedown = bc.onmousemove = bc.onmouseup = bc.onmouseleave = bc.onmouseenter = null;
+  bc.ontouchstart = bc.ontouchmove = bc.ontouchend = null;
+  document.getElementById('brush-cursor').style.display = 'none';
+}
+function brushApply() {
+  const slot = slots.find(s => s.id === brushSlotId) || extraSlots.find(s => s.id === brushSlotId);
+  if (!slot) { brushCancel(); return; }
+  const bc = document.getElementById('brush-canvas');
+  const out = document.createElement('canvas');
+  out.width = bc.width; out.height = bc.height;
+  out.getContext('2d').drawImage(bc, 0, 0);
+  slot.croppedCanvasOriginal = out;
+  slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
+  invalidateThumb(slot); slot._colorImgUrl = null;
+  renderPhotoList(); updateCroppedList(); renderColorGrid();
+  brushCancel();
+  toast('\u{1f58c} Aclarado aplicado', 'success');
+}
+
+// FREE RATIO TOGGLE (for oclusales and any photo)
+// =====================================================
+function toggleFreeRatio() {
+  if (currentSlotIdx === null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+  if (slot._freeRatio) {
+    // Switch back to fixed
+    slot._freeRatio = false;
+    document.getElementById('btn-free-ratio').classList.remove('active');
+    document.getElementById('btn-free-ratio').textContent = '📐 Ratio fijo';
+    toast('Ratio fijo: ' + formatRatio(slot.ratio), 'info');
+    initCropBox(slot);
+  } else {
+    slot._freeRatio = true;
+    document.getElementById('btn-free-ratio').classList.add('active');
+    document.getElementById('btn-free-ratio').textContent = '📐 Ratio libre';
+    toast('Ratio libre — recorta como quieras', 'info');
+  }
+}
+
+// =====================================================
+// COLOR VIEW: add rotation per card
+// =====================================================
+
+// =====================================================
+// FILE-BASED SAVE/LOAD (.fourden files)
+// Save to Drive shared folder → access from any computer
+// =====================================================
+
+// Resize image for storage (max 3000px, JPEG 90%)
+function resizeForStorage(src, maxDim) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      if (img.width <= maxDim && img.height <= maxDim) { resolve(src); return; }
+      const scale = maxDim / Math.max(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', .90));
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+}
+
+// SAVE → downloads a .fourden file (JSON with all session data)
+async function saveSessionFile() {
+  const patientName = document.getElementById('patient-name').value.trim();
+  if (!patientName) { toast('Escribe el nombre del paciente', 'error'); return; }
+  const patientDate = document.getElementById('patient-date').value;
+
+  toast('💾 Preparando archivo...', 'info');
+
+  const slotsData = [];
+  for (const s of getAllSlots()) {
+    const sd = {
+      id: s.id, name: s.name, group: s.group, ratio: s.ratio, pack: s.pack,
+      colorRow: s.colorRow, icon: s.icon, row: s.row,
+      occlusal: s.occlusal || null, optional: s.optional || false, extra: s.extra || false,
+      cropBoxData: s.cropBoxData,
+      rotation: s.rotation, fineRotation: s.fineRotation,
+      flipH: s.flipH, flipV: s.flipV,
+      brightness: s.brightness, contrast: s.contrast, saturation: s.saturation, warmth: s.warmth,
+      isColorRef: s.isColorRef,
+      imgSrc: null, croppedDataUrl: null
+    };
+    // Resize originals to save space (3000px max → ~500KB-1MB each)
+    if (s.imgSrc) sd.imgSrc = await resizeForStorage(s.imgSrc, 3000);
+    // Save cropped version
+    if (s.croppedCanvasOriginal) sd.croppedDataUrl = s.croppedCanvasOriginal.toDataURL('image/jpeg', .90);
+    slotsData.push(sd);
+  }
+
+  const sessionData = {
+    version: 9,
+    patientName,
+    patientDob: document.getElementById('patient-dob').value,
+    patientDate,
+    slotsData,
+    mosaicOffsets: { ...mosaicOffsets },
+    savedAt: new Date().toISOString(),
+    photoCount: getAllSlots().filter(s => s.croppedCanvas).length
+  };
+
+  const json = JSON.stringify(sessionData);
+  const blob = new Blob([json], { type: 'application/json' });
+  const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeName = patientName.replace(/\s+/g, '_').toUpperCase();
+  link.download = `${safeName}_${patientDate}.fourden`;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast(`💾 Guardado: ${safeName} (${sizeMB} MB). Guárdalo en tu carpeta de Drive compartida.`, 'success');
+}
+
+// LOAD → opens a .fourden file and restores the session
+async function loadSessionFile(input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+
+  if (!confirm(`¿Cargar "${file.name}"?\nSe perderá el trabajo actual no guardado.`)) {
+    input.value = '';
+    return;
+  }
+
+  toast('📂 Cargando...', 'info');
+
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // Restore patient info
+      document.getElementById('patient-name').value = data.patientName || '';
+      document.getElementById('patient-dob').value = data.patientDob || '';
+      document.getElementById('patient-date').value = data.patientDate || '';
+      currentSlotIdx = null;
+      extraSlots = [];
+      mosaicOffsets = data.mosaicOffsets || {};
+
+      // Reset all base slots first
+      slots.forEach(s => {
+        s.imgSrc = null; s.imgEl = null;
+        s.croppedCanvas = null; s.croppedCanvasOriginal = null;
+        s.thumbDataUrl = null; s._colorImgUrl = null;
+        s.cropBoxData = null;
+        s.rotation = 0; s.fineRotation = 0; s.flipH = false; s.flipV = false;
+        s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0;
+        s.isColorRef = false; s.colorStats = null;
+      });
+
+      // Restore each slot from saved data
+      for (const sd of (data.slotsData || [])) {
+        let slot = slots.find(s => s.id === sd.id);
+        if (!slot && sd.extra) {
+          extraSlots.push({
+            ...sd, imgEl: null, croppedCanvas: null, croppedCanvasOriginal: null,
+            thumbDataUrl: null, colorStats: null, _colorImgUrl: null
+          });
+          slot = extraSlots[extraSlots.length - 1];
+        }
+        if (!slot) continue;
+
+        slot.imgSrc = sd.imgSrc;
+        slot.imgEl = null;
+        slot.cropBoxData = sd.cropBoxData;
+        slot.rotation = sd.rotation || 0;
+        slot.fineRotation = sd.fineRotation || 0;
+        slot.flipH = sd.flipH || false;
+        slot.flipV = sd.flipV || false;
+        slot.brightness = sd.brightness || 100;
+        slot.contrast = sd.contrast || 100;
+        slot.saturation = sd.saturation || 100;
+        slot.warmth = sd.warmth || 0;
+        slot.isColorRef = sd.isColorRef || false;
+        slot.thumbDataUrl = null;
+        slot._colorImgUrl = null;
+
+        // Restore cropped canvas
+        if (sd.croppedDataUrl) {
+          await new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = img.width; c.height = img.height;
+              c.getContext('2d').drawImage(img, 0, 0);
+              slot.croppedCanvasOriginal = c;
+              slot.croppedCanvas = applyColorFilterToCanvas(c, slot);
+              invalidateThumb(slot);
+              resolve();
+            };
+            img.onerror = () => resolve();
+            img.src = sd.croppedDataUrl;
+          });
+        }
+      }
+
+      renderPhotoList();
+      updateCroppedList();
+      document.getElementById('crop-empty-msg').style.display = 'block';
+      document.getElementById('crop-editor').style.display = 'none';
+      switchView('crop');
+      toast(`✓ Cargado: ${data.patientName} (${data.photoCount || 0} fotos)`, 'success');
+    } catch (err) {
+      console.error('Load error:', err);
+      toast('Error: archivo no válido', 'error');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// NEW SESSION
+function newSession() {
+  if (!confirm('¿Nuevo paciente? Se perderá el trabajo actual no guardado.')) return;
+  document.getElementById('patient-name').value = '';
+  document.getElementById('patient-dob').value = '';
+  document.getElementById('patient-date').value = new Date().toISOString().split('T')[0];
+  currentSlotIdx = null; extraSlots = []; mosaicOffsets = {};
+  slots.forEach(s => {
+    s.imgSrc = null; s.imgEl = null;
+    s.croppedCanvas = null; s.croppedCanvasOriginal = null;
+    s.thumbDataUrl = null; s._colorImgUrl = null;
+    s.cropBoxData = null;
+    s.rotation = 0; s.fineRotation = 0; s.flipH = false; s.flipV = false;
+    s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0;
+    s.isColorRef = false; s.colorStats = null;
+  });
+  renderPhotoList(); updateCroppedList();
+  document.getElementById('crop-empty-msg').style.display = 'block';
+  document.getElementById('crop-editor').style.display = 'none';
+  switchView('crop');
+  toast('Nuevo paciente', 'success');
+}
+
+</script>
+</body>
+</html>
