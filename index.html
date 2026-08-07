@@ -319,9 +319,9 @@
               <div class="crop-handle tr" data-dir="tr"></div>
               <div class="crop-handle bl" data-dir="bl"></div>
               <div class="crop-handle br" data-dir="br"></div>
+              <div class="guide-line" id="guide-h" style="display:none; top:50%"></div>
+              <div class="guide-vertical" id="guide-v" style="display:none; left:50%"></div>
             </div>
-            <div class="guide-line" id="guide-h" style="display:none; top:50%"></div>
-            <div class="guide-vertical" id="guide-v" style="display:none; left:50%"></div>
           </div>
           <div class="help-tip">
             <b>Plano (─):</b> alinea ojos/dientes &nbsp;·&nbsp;
@@ -378,6 +378,14 @@
             <label>Temperatura <span id="cv-warmth">—</span></label>
             <input type="range" id="cs-warmth" min="-30" max="30" value="0" oninput="onColorSlider('warmth')" disabled>
           </div>
+          <div class="color-slider-group">
+            <label>Encías <span id="cv-gumsPink" style="color:#f25f5c">—</span></label>
+            <input type="range" id="cs-gumsPink" min="-50" max="50" value="0" oninput="onColorSlider('gumsPink')" disabled style="accent-color:#f25f5c">
+          </div>
+          <div class="color-slider-group">
+            <label>Dientes <span id="cv-teethWhite" style="color:#f7c948">—</span></label>
+            <input type="range" id="cs-teethWhite" min="0" max="80" value="0" oninput="onColorSlider('teethWhite')" disabled style="accent-color:#f7c948">
+          </div>
         </div>
         <div class="color-actions-row">
           <button class="crop-action-btn" onclick="resetSelectedColors()">⟲ Reset color de seleccionadas</button>
@@ -425,8 +433,8 @@
       <input type="range" id="brush-size" min="10" max="300" value="100" style="width:160px; accent-color:var(--accent);">
       <span id="brush-size-val" style="font-size:11px; font-family:'DM Mono',monospace; color:var(--accent);">100px</span>
       <label style="font-size:11px; color:var(--text2);">Intensidad:</label>
-      <input type="range" id="brush-opacity" min="1" max="25" value="5" style="width:120px; accent-color:var(--yellow);">
-      <span id="brush-opacity-val" style="font-size:11px; font-family:'DM Mono',monospace; color:var(--yellow);">5%</span>
+      <input type="range" id="brush-opacity" min="3" max="40" value="12" style="width:120px; accent-color:var(--yellow);">
+      <span id="brush-opacity-val" style="font-size:11px; font-family:'DM Mono',monospace; color:var(--yellow);">12%</span>
       <button class="crop-action-btn" onclick="brushUndo()">↩ Deshacer</button>
     </div>
     <div style="overflow:auto; max-height:60vh; text-align:center; background:#000; border-radius:8px; position:relative;">
@@ -530,6 +538,7 @@ let slots = SET_SLOTS.map(s => ({
   thumbDataUrl: null,        // Cache for list thumbnails
   rotation: 0, fineRotation: 0, flipH: false, flipV: false,
   brightness: 100, contrast: 100, saturation: 100, warmth: 0,
+  gumsPink: 0, teethWhite: 0,
   cropBoxData: null,         // Normalized crop box: {normX, normY, normW, normH}
   isColorRef: false,
   colorStats: null
@@ -589,11 +598,11 @@ function buildFilter(slot) {
   const b = slot.brightness || 100, c = slot.contrast || 100, s = slot.saturation || 100, w = slot.warmth || 0;
   // When everything is default, return 'none' to avoid CSS filter color artifacts
   if (b === 100 && c === 100 && s === 100 && w === 0) return 'none';
-  // POWER-LAW COMPENSATION: CSS brightness() multiplies RGB linearly → boosts chroma.
-  // Compensate: sat × (100/brightness)^0.9 to neutralize.
+  // POWER-LAW COMPENSATION: less aggressive (0.5 instead of 0.9)
+  // brightness 122 → effectiveSat = 91% (subtle, not pale)
   let effectiveSat = s;
   if (b > 0 && b !== 100) {
-    effectiveSat = s * Math.pow(100 / b, 0.9);
+    effectiveSat = s * Math.pow(100 / b, 0.5);
   }
   effectiveSat = Math.max(20, Math.min(200, effectiveSat));
   const sepia = Math.max(0, w) / 100;
@@ -896,7 +905,7 @@ function loadPhotoFile(input) {
     slot.cropBoxData = null;
     slot.flipH = false; slot.flipV = false; slot.rotation = 0; slot.fineRotation = 0;
     // Reset ALL color to clean state — prevents previous values leaking to new photo
-    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0; slot.gumsPink = 0; slot.teethWhite = 0;
     slot.croppedCanvas = null; slot.croppedCanvasOriginal = null;
     slot.thumbDataUrl = null; slot._colorImgUrl = null;
     showCropEditor(slot);
@@ -1160,9 +1169,9 @@ function setupGuideHandlers() {
     const sy = e.clientY;
     const st = parseFloat(guideHEl.style.top) || 0;
     const onMove = ev => {
-      const contH = cropContainerEl.getBoundingClientRect().height;
+      const boxH = cropBoxEl.offsetHeight;
       let nt = st + (ev.clientY - sy);
-      nt = Math.max(0, Math.min(contH, nt));
+      nt = Math.max(0, Math.min(boxH, nt));
       guideHEl.style.top = nt + 'px';
     };
     const onUp = () => {
@@ -1177,9 +1186,9 @@ function setupGuideHandlers() {
     const sx = e.clientX;
     const sl = parseFloat(guideVEl.style.left) || 0;
     const onMove = ev => {
-      const contW = cropContainerEl.getBoundingClientRect().width;
+      const boxW = cropBoxEl.offsetWidth;
       let nl = sl + (ev.clientX - sx);
-      nl = Math.max(0, Math.min(contW, nl));
+      nl = Math.max(0, Math.min(boxW, nl));
       guideVEl.style.left = nl + 'px';
     };
     const onUp = () => {
@@ -1194,13 +1203,13 @@ function setupGuideHandlers() {
 function toggleGuideH() {
   const visible = guideHEl.style.display !== 'none';
   guideHEl.style.display = visible ? 'none' : 'block';
-  if (!visible) guideHEl.style.top = (cropContainerEl.getBoundingClientRect().height / 2) + 'px';
+  if (!visible) guideHEl.style.top = (cropBoxEl.offsetHeight / 2) + 'px';
   document.getElementById('btn-guide-h').classList.toggle('active', !visible);
 }
 function toggleGuideV() {
   const visible = guideVEl.style.display !== 'none';
   guideVEl.style.display = visible ? 'none' : 'block';
-  if (!visible) guideVEl.style.left = (cropContainerEl.getBoundingClientRect().width / 2) + 'px';
+  if (!visible) guideVEl.style.left = (cropBoxEl.offsetWidth / 2) + 'px';
   document.getElementById('btn-guide-v').classList.toggle('active', !visible);
 }
 
@@ -1325,20 +1334,54 @@ function autoJumpToNextInPack(justCroppedSlot) {
 
 function applyColorFilterToCanvas(srcCanvas, slot) {
   const filter = buildFilter(slot);
-  // When filter is 'none', return a clean copy without any CSS filter processing
-  if (filter === 'none') {
-    const out = document.createElement('canvas');
-    out.width = srcCanvas.width;
-    out.height = srcCanvas.height;
-    out.getContext('2d').drawImage(srcCanvas, 0, 0);
-    return out;
-  }
+  const needsPixelWork = (slot.gumsPink && slot.gumsPink !== 0) || (slot.teethWhite && slot.teethWhite > 0);
+
+  // Step 1: Apply CSS filter (brightness, contrast, saturation, warmth)
   const out = document.createElement('canvas');
   out.width = srcCanvas.width;
   out.height = srcCanvas.height;
   const ctx = out.getContext('2d');
-  ctx.filter = filter;
+  if (filter !== 'none') {
+    ctx.filter = filter;
+  }
   ctx.drawImage(srcCanvas, 0, 0);
+
+  // Step 2: If gumsPink or teethWhite, do pixel-level color shifts
+  if (needsPixelWork) {
+    const imgData = ctx.getImageData(0, 0, out.width, out.height);
+    const d = imgData.data;
+    const gp = (slot.gumsPink || 0) / 50;    // -1 to +1
+    const tw = (slot.teethWhite || 0) / 80;  // 0 to 1
+
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i+1], b = d[i+2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const sat = mx > 0 ? (mx - mn) / mx : 0;
+
+      // GUMS (red-dominant pixels): subtle shift toward pink (+) or deeper red (-)
+      if (gp !== 0 && r > 80 && r > g * 1.1 && sat > 0.1) {
+        const redStrength = Math.min(1, Math.max(0, (r - Math.max(g, b)) / 60));
+        if (redStrength > 0.05) {
+          d[i+2] = Math.min(255, Math.max(0, Math.round(b + gp * 20 * redStrength)));
+          d[i+1] = Math.min(255, Math.max(0, Math.round(g + gp * 8 * redStrength)));
+          if (gp < 0) d[i] = Math.min(255, Math.round(r - gp * 5 * redStrength));
+        }
+      }
+
+      // TEETH (yellow-dominant pixels): gentle whitening
+      if (tw > 0 && r > 100 && g > 80 && r > b * 1.15 && g > b * 0.9) {
+        const yellowness = Math.min(1, Math.max(0, (Math.min(r, g) - b) / 60));
+        if (yellowness > 0.1) {
+          const blend = tw * yellowness;
+          d[i]   = Math.min(255, Math.round(r + (255 - r) * blend * 0.1));
+          d[i+1] = Math.min(255, Math.round(g + (255 - g) * blend * 0.1));
+          d[i+2] = Math.min(255, Math.round(b + (255 - b) * blend * 0.18));
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
   return out;
 }
 
@@ -1461,11 +1504,10 @@ function applyColorToSelected() {
 function autoImproveCurrentPhoto() {
   if (currentSlotIdx === null) return;
   const slot = getSlotByIdx(currentSlotIdx);
-  // Need a cropped photo to work on
   if (!slot.croppedCanvasOriginal) { toast('Confirma el recorte primero', 'error'); return; }
 
   const src = slot.croppedCanvasOriginal;
-  // Analyze luminance
+  // Analyze luminance to decide how much correction
   const small = document.createElement('canvas');
   const W = 80, H = Math.max(1, Math.round(80 * src.height / src.width));
   small.width = W; small.height = H;
@@ -1478,39 +1520,52 @@ function autoImproveCurrentPhoto() {
   }
   const meanL = sumL / count;
 
-  // Calculate screen blend amount based on how dark the photo is
-  // Target: gently lift to ~105 mean luminance
-  // Amount = how much to blend toward white (0 = nothing, 0.05 = subtle)
-  let amount = (105 - meanL) / 600; // Very gentle
-  amount = Math.max(0, Math.min(0.06, amount)); // Cap at 6%
-  if (amount < 0.005) { toast('La foto ya tiene buen brillo', 'info'); return; }
+  // GAMMA CORRECTION — calibrated against Photoscape "aclarado"
+  // Always applies, but LESS on brighter photos.
+  // gamma < 1 lifts shadows A LOT, midtones MODERATELY, highlights BARELY
+  let gamma;
+  if (meanL < 60) gamma = 0.72;       // Very dark → strong lift
+  else if (meanL < 75) gamma = 0.78;  // Dark → moderate
+  else if (meanL < 90) gamma = 0.84;  // Typical dental intraoral
+  else if (meanL < 105) gamma = 0.88; // Mid-range
+  else if (meanL < 120) gamma = 0.92; // Already bright → subtle
+  else if (meanL < 140) gamma = 0.95; // Bright → very subtle
+  else { toast('La foto está sobreexpuesta, no necesita aclarado', 'info'); return; }
 
-  // Apply PIXEL-LEVEL screen blend to the FULL image — same as the brush
-  // Formula: new = old + (255 - old) * amount
-  // This preserves color ratios perfectly — no paleness, no saturation change
+  // Apply GAMMA per pixel with saturation compensation
   const out = document.createElement('canvas');
   out.width = src.width; out.height = src.height;
   const ctx = out.getContext('2d');
   ctx.drawImage(src, 0, 0);
   const imgData = ctx.getImageData(0, 0, out.width, out.height);
   const d = imgData.data;
+  // Pre-compute gamma LUT
+  const lut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    lut[i] = Math.min(255, Math.round(255 * Math.pow(i / 255, gamma)));
+  }
+  // Saturation boost to compensate gamma's natural desaturation
+  // gamma 0.78 → satBoost 1.08, gamma 0.92 → satBoost 1.03
+  const satBoost = 1 + (1 - gamma) * 0.4;
   for (let i = 0; i < d.length; i += 4) {
-    d[i]   = Math.min(255, Math.round(d[i]   + (255 - d[i])   * amount));
-    d[i+1] = Math.min(255, Math.round(d[i+1] + (255 - d[i+1]) * amount));
-    d[i+2] = Math.min(255, Math.round(d[i+2] + (255 - d[i+2]) * amount));
+    // Apply gamma
+    let r = lut[d[i]], g = lut[d[i+1]], b = lut[d[i+2]];
+    // Re-saturate: push each channel away from gray
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    r = Math.min(255, Math.max(0, Math.round(gray + (r - gray) * satBoost)));
+    g = Math.min(255, Math.max(0, Math.round(gray + (g - gray) * satBoost)));
+    b = Math.min(255, Math.max(0, Math.round(gray + (b - gray) * satBoost)));
+    d[i] = r; d[i+1] = g; d[i+2] = b;
   }
   ctx.putImageData(imgData, 0, 0);
 
-  // Replace the original with the improved version
   slot.croppedCanvasOriginal = out;
   slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
   invalidateThumb(slot);
   slot._colorImgUrl = null;
-
-  // DON'T change CSS filter sliders — the improvement is baked into the pixels
   renderPhotoList();
   updateCroppedList();
-  toast(`✨ Aclarado aplicado (${(amount * 100).toFixed(1)}%)`, 'success');
+  toast(`✨ Aclarado γ=${gamma} (luminancia ${meanL.toFixed(0)} → levantada)`, 'success');
 }
 
 
@@ -1572,12 +1627,18 @@ function buildColorCard(slot) {
   imgWrap.className = 'color-card-img-wrap';
   const img = document.createElement('img');
   img.className = 'color-card-img';
-  // Cache the original as data URL once
-  if (!slot._colorImgUrl) {
-    slot._colorImgUrl = slot.croppedCanvasOriginal.toDataURL('image/jpeg', .78);
+  // If pixel-based effects (gumsPink/teethWhite) are active, show the fully processed canvas
+  const hasPixelEffects = (slot.gumsPink && slot.gumsPink !== 0) || (slot.teethWhite && slot.teethWhite > 0);
+  if (hasPixelEffects && slot.croppedCanvas) {
+    img.src = slot.croppedCanvas.toDataURL('image/jpeg', .78);
+    img.style.filter = 'none'; // Already baked in
+  } else {
+    if (!slot._colorImgUrl) {
+      slot._colorImgUrl = slot.croppedCanvasOriginal.toDataURL('image/jpeg', .78);
+    }
+    img.src = slot._colorImgUrl;
+    img.style.filter = buildFilter(slot);
   }
-  img.src = slot._colorImgUrl;
-  img.style.filter = buildFilter(slot);
   imgWrap.appendChild(img);
 
   const compareBtn = document.createElement('button');
@@ -1638,7 +1699,7 @@ function buildColorCard(slot) {
   resetBtn.title = 'Reset color';
   resetBtn.onclick = e => {
     e.stopPropagation();
-    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0; slot.gumsPink = 0; slot.teethWhite = 0;
     refreshCroppedColor(slot);
     updateSingleCardVisual(slot);
     updateSlidersFromSelection();
@@ -1698,7 +1759,7 @@ function toggleColorSelection(id) {
 }
 
 function updateSlidersFromSelection() {
-  const ids = ['brightness', 'contrast', 'saturation', 'warmth'];
+  const ids = ['brightness', 'contrast', 'saturation', 'warmth', 'gumsPink', 'teethWhite'];
   const sliders = ids.map(k => document.getElementById('cs-' + k));
   const labels = ids.map(k => document.getElementById('cv-' + k));
 
@@ -1784,24 +1845,51 @@ function computeColorStats(slot) {
 
 // Debounced slider handler for smooth performance
 let colorSliderRAF = null;
+let pixelSliderTimeout = null;
 function onColorSlider(key) {
   const v = parseFloat(document.getElementById('cs-' + key).value);
   document.getElementById('cv-' + key).textContent = v;
   if (colorSelectedIds.size === 0) return;
-  if (colorSliderRAF) cancelAnimationFrame(colorSliderRAF);
-  colorSliderRAF = requestAnimationFrame(() => {
+
+  const isPixelBased = (key === 'gumsPink' || key === 'teethWhite');
+
+  if (isPixelBased) {
+    // Debounce pixel-based sliders (expensive) — process every 150ms
     colorSelectedIds.forEach(id => {
       const slot = slots.find(s => s.id === id);
-      if (!slot) return;
-      slot[key] = v;
-      // Cheap update: only change CSS filter on the visible <img>
-      updateSingleCardVisual(slot);
+      if (slot) slot[key] = v;
     });
-  });
+    clearTimeout(pixelSliderTimeout);
+    pixelSliderTimeout = setTimeout(() => {
+      colorSelectedIds.forEach(id => {
+        const slot = slots.find(s => s.id === id);
+        if (!slot) return;
+        refreshCroppedColor(slot);
+        slot._colorImgUrl = null;
+        const card = document.querySelector(`.color-card[data-slot-id="${id}"] .color-card-img`);
+        if (card) {
+          card.src = slot.croppedCanvas.toDataURL('image/jpeg', .65);
+          card.style.filter = 'none';
+        }
+      });
+      updateCroppedList();
+    }, 150);
+  } else {
+    // CSS-based: cheap live preview
+    if (colorSliderRAF) cancelAnimationFrame(colorSliderRAF);
+    colorSliderRAF = requestAnimationFrame(() => {
+      colorSelectedIds.forEach(id => {
+        const slot = slots.find(s => s.id === id);
+        if (!slot) return;
+        slot[key] = v;
+        updateSingleCardVisual(slot);
+      });
+    });
+  }
 }
 
 // When user releases a slider, actually re-render the cropped canvas (expensive)
-['cs-brightness', 'cs-contrast', 'cs-saturation', 'cs-warmth'].forEach(id => {
+['cs-brightness', 'cs-contrast', 'cs-saturation', 'cs-warmth', 'cs-gumsPink', 'cs-teethWhite'].forEach(id => {
   document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1821,7 +1909,7 @@ function resetSelectedColors() {
   colorSelectedIds.forEach(id => {
     const slot = slots.find(s => s.id === id);
     if (!slot) return;
-    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
+    slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0; slot.gumsPink = 0; slot.teethWhite = 0;
     refreshCroppedColor(slot);
     updateSingleCardVisual(slot);
   });
@@ -2272,19 +2360,21 @@ async function downloadAllCropped() {
 }
 
 // =====================================================
-// BRUSH TOOL — pixel-level "aclarado" (same as Photoscape)
-// Hard circle, no re-lightening per stroke, visible cursor
+// BRUSH TOOL — professional dodge with float mask
+// Paints a mask during stroke, applies gamma ONCE on release
+// No rings because overlapping areas use MAX blending
 // =====================================================
 let brushHistory = [];
 let brushSlotId = null;
-let brushMask = null;
+let brushMaskFloat = null; // Float32Array — stores max intensity per pixel
+let brushBaseData = null;  // Original pixel data before this stroke
 
 function openBrushTool(slotId) {
   const slot = slots.find(s => s.id === slotId) || extraSlots.find(s => s.id === slotId);
   if (!slot || !slot.croppedCanvasOriginal) { toast('No hay foto recortada', 'error'); return; }
   brushSlotId = slotId;
   brushHistory = [];
-  brushMask = null;
+  brushMaskFloat = null;
   const bc = document.getElementById('brush-canvas');
   const src = slot.croppedCanvasOriginal;
   bc.width = src.width; bc.height = src.height;
@@ -2292,8 +2382,8 @@ function openBrushTool(slotId) {
   brushHistory.push(bc.getContext('2d').getImageData(0, 0, bc.width, bc.height));
   document.getElementById('brush-size').value = 100;
   document.getElementById('brush-size-val').textContent = '100px';
-  document.getElementById('brush-opacity').value = 5;
-  document.getElementById('brush-opacity-val').textContent = '5%';
+  document.getElementById('brush-opacity').value = 12;
+  document.getElementById('brush-opacity-val').textContent = '12%';
   const cursor = document.getElementById('brush-cursor');
   let painting = false;
   const updateCursor = e => {
@@ -2306,19 +2396,29 @@ function openBrushTool(slotId) {
     cursor.style.display = 'block';
   };
   bc.onmouseenter = e => updateCursor(e);
-  bc.onmouseleave = () => { cursor.style.display = 'none'; if (painting) { painting = false; brushMask = null; brushSaveState(); } };
-  bc.onmousemove = e => { updateCursor(e); if (painting) brushStroke(e); };
-  bc.onmousedown = e => { painting = true; brushMask = new Uint8Array(bc.width * bc.height); brushStroke(e); };
-  bc.onmouseup = () => { painting = false; brushMask = null; brushSaveState(); };
-  bc.ontouchstart = e => { e.preventDefault(); painting = true; brushMask = new Uint8Array(bc.width * bc.height); brushStroke(e.touches[0]); };
-  bc.ontouchmove = e => { e.preventDefault(); if (painting) brushStroke(e.touches[0]); };
-  bc.ontouchend = () => { painting = false; brushMask = null; brushSaveState(); };
+  bc.onmouseleave = () => { cursor.style.display = 'none'; if (painting) { painting = false; brushApplyMask(); } };
+  bc.onmousemove = e => { updateCursor(e); if (painting) brushPaintMask(e); };
+  bc.onmousedown = e => {
+    painting = true;
+    brushMaskFloat = new Float32Array(bc.width * bc.height);
+    brushBaseData = bc.getContext('2d').getImageData(0, 0, bc.width, bc.height);
+    brushPaintMask(e);
+  };
+  bc.onmouseup = () => { painting = false; brushApplyMask(); };
+  bc.ontouchstart = e => {
+    e.preventDefault(); painting = true;
+    brushMaskFloat = new Float32Array(bc.width * bc.height);
+    brushBaseData = bc.getContext('2d').getImageData(0, 0, bc.width, bc.height);
+    brushPaintMask(e.touches[0]);
+  };
+  bc.ontouchmove = e => { e.preventDefault(); if (painting) brushPaintMask(e.touches[0]); };
+  bc.ontouchend = () => { painting = false; brushApplyMask(); };
   document.getElementById('brush-modal').classList.add('show');
 }
 
-function brushStroke(e) {
+// Paint the MASK only (not the image) — accumulates MAX intensity
+function brushPaintMask(e) {
   const bc = document.getElementById('brush-canvas');
-  const ctx = bc.getContext('2d');
   const rect = bc.getBoundingClientRect();
   const sx = bc.width / rect.width, sy = bc.height / rect.height;
   const cx = (e.clientX - rect.left) * sx, cy = (e.clientY - rect.top) * sy;
@@ -2326,25 +2426,55 @@ function brushStroke(e) {
   const strength = parseInt(document.getElementById('brush-opacity').value) / 100;
   const x0 = Math.max(0, Math.floor(cx - radius)), y0 = Math.max(0, Math.floor(cy - radius));
   const x1 = Math.min(bc.width, Math.ceil(cx + radius)), y1 = Math.min(bc.height, Math.ceil(cy + radius));
-  const w = x1 - x0, h = y1 - y0;
-  if (w <= 0 || h <= 0) return;
-  const imgData = ctx.getImageData(x0, y0, w, h);
-  const d = imgData.data;
   const r2 = radius * radius;
-  for (let py = 0; py < h; py++) {
-    for (let px = 0; px < w; px++) {
-      const ax = x0 + px, ay = y0 + py;
-      if ((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) > r2) continue;
-      const mi = ay * bc.width + ax;
-      if (brushMask && brushMask[mi]) continue;
-      if (brushMask) brushMask[mi] = 1;
-      const i = (py * w + px) * 4;
-      d[i]   = Math.min(255, Math.round(d[i]   + (255 - d[i])   * strength));
-      d[i+1] = Math.min(255, Math.round(d[i+1] + (255 - d[i+1]) * strength));
-      d[i+2] = Math.min(255, Math.round(d[i+2] + (255 - d[i+2]) * strength));
+  const edgeStart = radius * 0.6; // 60% hard center, 40% feather
+  let changed = false;
+  for (let py = y0; py < y1; py++) {
+    for (let px = x0; px < x1; px++) {
+      const dx = px - cx, dy = py - cy;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 > r2) continue;
+      const dist = Math.sqrt(dist2);
+      let fade = 1;
+      if (dist > edgeStart) fade = 1 - (dist - edgeStart) / (radius - edgeStart);
+      const val = strength * fade;
+      const mi = py * bc.width + px;
+      if (val > brushMaskFloat[mi]) { brushMaskFloat[mi] = val; changed = true; }
     }
   }
-  ctx.putImageData(imgData, x0, y0);
+  // Live preview: apply mask to base data and show
+  if (changed) brushPreview();
+}
+
+// Show live preview of the mask applied to base image
+function brushPreview() {
+  const bc = document.getElementById('brush-canvas');
+  const ctx = bc.getContext('2d');
+  const base = brushBaseData;
+  const preview = ctx.createImageData(bc.width, bc.height);
+  const src = base.data, dst = preview.data;
+  for (let i = 0, pi = 0; i < src.length; i += 4, pi++) {
+    const m = brushMaskFloat[pi];
+    if (m > 0.001) {
+      const g = 1 - m; // gamma
+      dst[i]   = Math.min(255, Math.round(255 * Math.pow(src[i]   / 255, g)));
+      dst[i+1] = Math.min(255, Math.round(255 * Math.pow(src[i+1] / 255, g)));
+      dst[i+2] = Math.min(255, Math.round(255 * Math.pow(src[i+2] / 255, g)));
+    } else {
+      dst[i] = src[i]; dst[i+1] = src[i+1]; dst[i+2] = src[i+2];
+    }
+    dst[i+3] = 255;
+  }
+  ctx.putImageData(preview, 0, 0);
+}
+
+// Apply mask permanently and save to history
+function brushApplyMask() {
+  if (!brushMaskFloat || !brushBaseData) return;
+  // The preview already shows the result, just save state
+  brushMaskFloat = null;
+  brushBaseData = null;
+  brushSaveState();
 }
 
 function brushSaveState() {
