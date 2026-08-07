@@ -158,8 +158,13 @@
   .color-empty .icon { font-size: 40px; margin-bottom: 10px; }
   #mosaic-section { display: none; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
   #mosaic-section.visible { display: flex; }
-  .mosaic-canvas-wrap { position: relative; box-shadow: 0 8px 40px rgba(0,0,0,.4); }
-  #mosaic-canvas-el { display: block; background: #fff; max-width: 100%; max-height: 75vh; border: 1px solid var(--border); }
+  .mosaic-canvas-wrap { position: relative; box-shadow: 0 8px 40px rgba(0,0,0,.4); transform-origin: top center; transition: transform .12s ease-out; }
+  #mosaic-canvas-el { display: block; background: #fff; max-width: 100%; max-height: 90vh; border: 1px solid var(--border); }
+  .mosaic-zoom-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .mosaic-zoom-bar button { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .mosaic-zoom-bar button:hover { border-color: var(--accent); color: var(--accent); }
+  .mosaic-zoom-bar .zoom-label { font-size: 11.5px; font-family: 'DM Mono', monospace; color: var(--text2); min-width: 44px; text-align: center; }
+  .mosaic-zoom-bar input[type=range] { width: 130px; accent-color: var(--accent); }
   .mosaic-overlay { position: absolute; inset: 0; pointer-events: none; }
   .photo-handle-overlay { position: absolute; pointer-events: auto; cursor: move; border: 2px solid transparent; }
   .photo-handle-overlay:hover, .photo-handle-overlay.editing { border-color: var(--accent); background: rgba(79,142,247,.1); }
@@ -291,8 +296,8 @@
         <span class="val" id="v-rotate-fine">0°</span>
         <button class="reset" onclick="resetFineRotation()">⟲</button>
       </div>
-      <button class="tool-btn" onclick="flipH()" id="btn-flip-h">⇄ H</button>
-      <button class="tool-btn" onclick="flipV()" id="btn-flip-v">⇅ V</button>
+      <button class="tool-btn" onclick="flipH()" id="btn-flip-h" title="Espejo horizontal (invierte izquierda ↔ derecha)">↔ Espejo H</button>
+      <button class="tool-btn" onclick="flipV()" id="btn-flip-v" title="Espejo vertical (invierte arriba ↕ abajo)">↕ Espejo V</button>
       <div class="tool-sep"></div>
       <button class="tool-btn" id="btn-guide-h" onclick="toggleGuideH()">─ Plano</button>
       <button class="tool-btn" id="btn-guide-v" onclick="toggleGuideV()">│ L. media</button>
@@ -338,6 +343,13 @@
 
       <div id="mosaic-section">
         <div class="help-tip" style="color:var(--accent)">💡 <b>Arrastra</b> el centro de una foto para moverla &nbsp;·&nbsp; <b>arrastra las esquinas amarillas</b> para agrandar/reducir</div>
+        <div class="mosaic-zoom-bar">
+          <button onclick="zoomMosaic(-0.15)" title="Alejar">🔍−</button>
+          <input type="range" id="mosaic-zoom-slider" min="0.5" max="3" step="0.05" value="1" oninput="setMosaicZoom(parseFloat(this.value))">
+          <button onclick="zoomMosaic(0.15)" title="Acercar">🔍+</button>
+          <span class="zoom-label" id="mosaic-zoom-label">100%</span>
+          <button onclick="setMosaicZoom(1)" title="Restablecer zoom">⊡ 100%</button>
+        </div>
         <div class="mosaic-canvas-wrap" id="mosaic-wrap">
           <canvas id="mosaic-canvas-el"></canvas>
           <div class="mosaic-overlay" id="mosaic-overlay"></div>
@@ -411,8 +423,8 @@
     <p id="modal-desc"></p>
     <div class="modal-preview" id="modal-preview"></div>
     <div class="transform-mini-btns">
-      <button onclick="modalTransform('flipH')">⇄ Espejo H</button>
-      <button onclick="modalTransform('flipV')">⇅ Espejo V</button>
+      <button onclick="modalTransform('flipH')" title="Invierte izquierda ↔ derecha">↔ Espejo H</button>
+      <button onclick="modalTransform('flipV')" title="Invierte arriba ↕ abajo">↕ Espejo V</button>
       <button onclick="modalTransform('rot90')">↻ +90°</button>
       <button onclick="modalTransform('rotm90')">↺ -90°</button>
       <button onclick="modalTransform('rot180')">↻ 180°</button>
@@ -945,10 +957,17 @@ function showCropEditor(slot) {
 function applyImgTransform(slot) {
   if (!slot) return;
   const t = [];
-  const totalRot = (slot.rotation || 0) + (slot.fineRotation || 0);
-  if (totalRot) t.push(`rotate(${totalRot}deg)`);
+  // Order matters: in CSS, transform functions listed LEFT compose OUTSIDE
+  // (applied AFTER the ones on the right to any point). Putting the flips
+  // FIRST here means "flip H" always mirrors left↔right ON SCREEN and
+  // "flip V" always mirrors top↔bottom ON SCREEN, no matter how much the
+  // photo is rotated. Previously the flip was inside the rotation, so on
+  // a 90°-rotated oclusal the H button looked like it flipped up/down and
+  // vice-versa — exactly the "swapped" behaviour reported.
   if (slot.flipH) t.push('scaleX(-1)');
   if (slot.flipV) t.push('scaleY(-1)');
+  const totalRot = (slot.rotation || 0) + (slot.fineRotation || 0);
+  if (totalRot) t.push(`rotate(${totalRot}deg)`);
   cropImgEl.style.transform = t.join(' ') || 'none';
   cropImgEl.style.filter = buildFilter(slot);
   syncFlipButtons(slot);
@@ -973,14 +992,28 @@ function initCropBox(slot) {
   const r = slot.ratio;
   let bw, bh, bx, by;
 
+  // Adjust an inherited box size to match ratio `r` EXACTLY while
+  // staying as close as possible to the inherited size — never
+  // discard it for an unrelated generic default. This is what
+  // used to make lateral/profile face crops come out a different
+  // size than the frontal ones: as soon as the source photo's
+  // aspect ratio differed slightly from the one the size was
+  // copied from, the code abandoned the inherited size entirely
+  // and fell back to "90% of the smaller dimension", which rarely
+  // matches the original framing.
+  function fitToRatio(bw, bh, r) {
+    if (bh <= 0) return { bw, bh };
+    if (Math.abs((bw / bh) - r) > 0.02) {
+      if ((bw / bh) > r) bw = bh * r; else bh = bw / r;
+    }
+    return { bw, bh };
+  }
+
   // PRIORITY 1: This slot already has its own saved crop → use exactly
   if (slot.cropBoxData) {
     bw = slot.cropBoxData.normW * imgW;
     bh = slot.cropBoxData.normH * imgH;
-    if (Math.abs((bw / bh) - r) > 0.05) {
-      if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
-      else { bw = imgW * .9; bh = bw / r; }
-    }
+    ({ bw, bh } = fitToRatio(bw, bh, r));
     bx = slot.cropBoxData.normX * imgW;
     by = slot.cropBoxData.normY * imgH;
   }
@@ -990,10 +1023,7 @@ function initCropBox(slot) {
     if (master.id !== slot.id) {
       bw = master.cropBoxData.normW * imgW;
       bh = master.cropBoxData.normH * imgH;
-      if (Math.abs((bw / bh) - r) > 0.05) {
-        if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
-        else { bw = imgW * .9; bh = bw / r; }
-      }
+      ({ bw, bh } = fitToRatio(bw, bh, r));
       // Same pack → same position too (they are same shot angle basically)
       bx = master.cropBoxData.normX * imgW;
       by = master.cropBoxData.normY * imgH;
@@ -1005,16 +1035,13 @@ function initCropBox(slot) {
       by = (imgH - bh) / 2;
     }
   }
-  // PRIORITY 3: Another slot with SAME RATIO already cropped → inherit only SIZE, center the position
+  // PRIORITY 3: Another slot with SAME RATIO already cropped → inherit SIZE (as a fraction of its own photo), center the position
   else {
     const template = getSizeTemplate(slot);
     if (template) {
       bw = template.cropBoxData.normW * imgW;
       bh = template.cropBoxData.normH * imgH;
-      if (Math.abs((bw / bh) - r) > 0.05) {
-        if (imgW / imgH > r) { bh = imgH * .9; bw = bh * r; }
-        else { bw = imgW * .9; bh = bw / r; }
-      }
+      ({ bw, bh } = fitToRatio(bw, bh, r));
       // Center position by default; user will move it
       bx = (imgW - bw) / 2;
       by = (imgH - bh) / 2;
@@ -1230,24 +1257,104 @@ function resetFineRotation() {
   applyImgTransform(slot);
 }
 
+// =====================================================
+// UNIFIED ROTATE/FLIP — preserves the crop box
+// Rotating or mirroring a photo must NOT throw away the crop
+// box the user already drew: it needs to be remapped through
+// the same geometric transform so it keeps framing the same
+// real content (e.g. the dental arch). Previously the box was
+// simply thrown out and recomputed from scratch (pack/template
+// defaults), which made flip/mirror look "broken" — especially
+// for OCLUSAL SUPERIOR/INFERIOR, which go through this same
+// path via the orientation modal.
+// =====================================================
+function remapNormBox(nx, ny, nw, nh, action) {
+  switch (action) {
+    case 'flipH':
+      return { nx: 1 - (nx + nw), ny: ny, nw: nw, nh: nh };
+    case 'flipV':
+      return { nx: nx, ny: 1 - (ny + nh), nw: nw, nh: nh };
+    case 'rot180':
+      return { nx: 1 - (nx + nw), ny: 1 - (ny + nh), nw: nw, nh: nh };
+    case 'rot90': // clockwise +90
+      return { nx: 1 - (ny + nh), ny: nx, nw: nh, nh: nw };
+    case 'rotm90': // counter-clockwise -90
+      return { nx: ny, ny: 1 - (nx + nw), nw: nh, nh: nw };
+    default:
+      return { nx, ny, nw, nh };
+  }
+}
+
+function transformSlotAndBox(slot, action) {
+  // 1. Capture the CURRENT crop box as a fraction of the current
+  //    (already transformed) image bounding rect, if one exists.
+  let box = null;
+  const preImgRect = cropImgEl.getBoundingClientRect();
+  if (preImgRect.width > 20 && cropBoxEl.style.width) {
+    const boxRect = cropBoxEl.getBoundingClientRect();
+    box = {
+      nx: (boxRect.left - preImgRect.left) / preImgRect.width,
+      ny: (boxRect.top - preImgRect.top) / preImgRect.height,
+      nw: boxRect.width / preImgRect.width,
+      nh: boxRect.height / preImgRect.height
+    };
+  }
+
+  // 2. Apply the transform to the slot's own state
+  if (action === 'flipH') slot.flipH = !slot.flipH;
+  else if (action === 'flipV') slot.flipV = !slot.flipV;
+  else if (action === 'rot90') slot.rotation = ((slot.rotation || 0) + 90) % 360;
+  else if (action === 'rotm90') slot.rotation = ((slot.rotation || 0) - 90 + 360) % 360;
+  else if (action === 'rot180') slot.rotation = ((slot.rotation || 0) + 180) % 360;
+  applyImgTransform(slot);
+
+  // 3. Remap the box into the new image frame and re-apply it —
+  //    only fall back to initCropBox() if there was no box yet.
+  requestAnimationFrame(() => {
+    const imgRect = cropImgEl.getBoundingClientRect();
+    if (imgRect.width < 20) { initCropBox(slot); return; }
+    if (!box) { initCropBox(slot); return; }
+    const contRect = cropContainerEl.getBoundingClientRect();
+    const offX = imgRect.left - contRect.left;
+    const offY = imgRect.top - contRect.top;
+
+    const m = remapNormBox(box.nx, box.ny, box.nw, box.nh, action);
+    let bw = m.nw * imgRect.width, bh = m.nh * imgRect.height;
+    if (!slot._freeRatio && bh > 0) {
+      const r = slot.ratio;
+      if (Math.abs((bw / bh) - r) > 0.02) {
+        if (bw / bh > r) bw = bh * r; else bh = bw / r;
+      }
+    }
+    let bx = m.nx * imgRect.width, by = m.ny * imgRect.height;
+    bx = Math.max(0, Math.min(imgRect.width - bw, bx));
+    by = Math.max(0, Math.min(imgRect.height - bh, by));
+    cropBoxEl.style.left = (offX + bx) + 'px';
+    cropBoxEl.style.top = (offY + by) + 'px';
+    cropBoxEl.style.width = bw + 'px';
+    cropBoxEl.style.height = bh + 'px';
+    cropContainerEl.dataset.offX = offX;
+    cropContainerEl.dataset.offY = offY;
+    cropContainerEl.dataset.imgW = imgRect.width;
+    cropContainerEl.dataset.imgH = imgRect.height;
+  });
+}
+
 function rotateCrop(deg) {
   if (currentSlotIdx === null) return;
   const slot = getSlotByIdx(currentSlotIdx);
-  slot.rotation = ((slot.rotation || 0) + deg + 360) % 360;
-  applyImgTransform(slot);
-  requestAnimationFrame(() => initCropBox(slot));
+  const action = deg === 90 ? 'rot90' : (deg === -90 ? 'rotm90' : 'rot180');
+  transformSlotAndBox(slot, action);
 }
 function flipH() {
   if (currentSlotIdx === null) return;
   const slot = getSlotByIdx(currentSlotIdx);
-  slot.flipH = !slot.flipH;
-  applyImgTransform(slot);
+  transformSlotAndBox(slot, 'flipH');
 }
 function flipV() {
   if (currentSlotIdx === null) return;
   const slot = getSlotByIdx(currentSlotIdx);
-  slot.flipV = !slot.flipV;
-  applyImgTransform(slot);
+  transformSlotAndBox(slot, 'flipV');
 }
 
 
@@ -1293,10 +1400,14 @@ function doActualCrop(slot) {
   const tempC = document.createElement('canvas');
   tempC.width = boundW; tempC.height = boundH;
   const tctx = tempC.getContext('2d');
+  // Same order convention as applyImgTransform (see comment there):
+  // scale BEFORE rotate → CTM = T · S · R → rotation is applied to the
+  // point first, then the flip in screen space, then translate to centre.
+  // Keeps the exported JPG matching what the user sees on screen.
   tctx.translate(boundW / 2, boundH / 2);
-  tctx.rotate(angleRad);
   if (slot.flipH) tctx.scale(-1, 1);
   if (slot.flipV) tctx.scale(1, -1);
+  tctx.rotate(angleRad);
   tctx.drawImage(cropImgEl, -natW / 2, -natH / 2, natW, natH);
 
   const scaleX = boundW / imgRect.width;
@@ -1420,10 +1531,11 @@ function refreshModalPreview(slot) {
   tempC.width = boundW; tempC.height = boundH;
   const tctx = tempC.getContext('2d');
   tctx.filter = buildFilter(slot);
+  // Same order fix as doActualCrop — flip in screen space.
   tctx.translate(boundW / 2, boundH / 2);
-  tctx.rotate(angleRad);
   if (slot.flipH) tctx.scale(-1, 1);
   if (slot.flipV) tctx.scale(1, -1);
+  tctx.rotate(angleRad);
   tctx.drawImage(cropImgEl, -natW / 2, -natH / 2, natW, natH);
   const scaleX = boundW / imgRect.width;
   const scaleY = boundH / imgRect.height;
@@ -1447,16 +1559,11 @@ function modalTransform(action) {
   const id = document.getElementById('modal-bg').dataset.slotId;
   const slot = slots.find(s => s.id === id);
   if (!slot) return;
-  if (action === 'flipH') slot.flipH = !slot.flipH;
-  else if (action === 'flipV') slot.flipV = !slot.flipV;
-  else if (action === 'rot90') slot.rotation = ((slot.rotation || 0) + 90) % 360;
-  else if (action === 'rotm90') slot.rotation = ((slot.rotation || 0) - 90 + 360) % 360;
-  else if (action === 'rot180') slot.rotation = ((slot.rotation || 0) + 180) % 360;
-  applyImgTransform(slot);
-  requestAnimationFrame(() => {
-    initCropBox(slot);
-    setTimeout(() => refreshModalPreview(slot), 60);
-  });
+  // Uses the same box-preserving transform as the main toolbar so
+  // flip/rotate inside the oclusal orientation modal keeps framing
+  // the arch instead of resetting the crop box.
+  transformSlotAndBox(slot, action);
+  setTimeout(() => refreshModalPreview(slot), 90);
 }
 
 function closeModal() { document.getElementById('modal-bg').classList.remove('show'); }
@@ -2101,39 +2208,52 @@ function drawMosaic() {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, A4_W, A4_H);
-  const HEADER_H = 110;
+  // Header sized so patient name + date are legible in printed A4
+  const HEADER_H = 270;
   ctx.fillStyle = '#1a2540';
   ctx.fillRect(0, 0, A4_W, HEADER_H);
   if (logoImg) {
-    const lh = 70, lw = logoImg.width * (lh / logoImg.height);
-    ctx.drawImage(logoImg, 30, 20, lw, lh);
+    // Bigger logo, vertically centred inside the header
+    const lh = 220, lw = logoImg.width * (lh / logoImg.height);
+    const ly = (HEADER_H - lh) / 2;
+    ctx.drawImage(logoImg, 30, ly, lw, lh);
   } else {
     ctx.fillStyle = '#4f8ef7';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.fillText('FOURDEN', 30, 65);
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillText('FOURDEN', 30, 160);
   }
   const name = document.getElementById('patient-name').value || 'Paciente';
   const dob = document.getElementById('patient-dob').value;
   const date = document.getElementById('patient-date').value;
   const fmt = d => d ? d.split('-').reverse().join('/') : '—';
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 26px sans-serif';
+  ctx.font = 'bold 62px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(name.toUpperCase(), A4_W / 2, 50);
-  ctx.font = '15px sans-serif';
-  ctx.fillStyle = '#a0b0d0';
-  ctx.fillText('F. Nacimiento: ' + fmt(dob) + '   ·   Exploración: ' + fmt(date), A4_W / 2, 80);
+  ctx.fillText(name.toUpperCase(), A4_W / 2, 115);
+  ctx.font = '52px sans-serif';
+  ctx.fillStyle = '#e2e8f5';
+  ctx.fillText('F. Nacimiento: ' + fmt(dob) + '   ·   Exploración: ' + fmt(date), A4_W / 2, 205);
   ctx.textAlign = 'left';
 
+  // =========================================================
+  // MOSAIC LAYOUT — WIDTH-FIRST
+  // The old system used fixed per-row weights and then derived
+  // cell width from row height (cellW = rowH * ratio). With the
+  // real photo ratios that overflows the A4 canvas (row 1 = 4x3:4
+  // gives 1678px on a 1654px sheet, row 2 = 3x3:2 gives 1702px).
+  // New approach: for each row we compute the row height that
+  // makes its cells EXACTLY fill the usable width, then scale all
+  // rows uniformly if they don't fit vertically. Result: every
+  // row goes edge-to-edge and cell sizes are consistent with the
+  // photo aspect ratios.
+  // =========================================================
   const PAD = 14;
+  const SIDE_MARGIN = 28;
   const AREA_Y = HEADER_H + PAD;
   const BOTTOM_RESERVE = 40;
   const AREA_H = A4_H - AREA_Y - BOTTOM_RESERVE;
-  const weights = [1.10, 0.75, 0.95, 0.75, 0.50];
-  const totalW = weights.reduce((a, b) => a + b, 0);
-  const usableH = AREA_H - PAD * 4;
-  const rowHeights = weights.map(w => usableH * (w / totalW));
-  let curY = AREA_Y;
+  const USABLE_W = A4_W - 2 * SIDE_MARGIN;
+
   const rowDef = [
     { ids: ['frontal_reposo', 'frontal_sonrisa', 'perfil_der', 'semiperfil'] },
     { ids: ['lateral_der_ocl', 'frontal_ocl', 'lateral_izq_ocl'] },
@@ -2141,21 +2261,51 @@ function drawMosaic() {
     { ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
     { ids: ['labios_reposo', 'labios_sonrisa'] },
   ];
-  rowDef.forEach((r, i) => { r.y = curY; r.h = rowHeights[i]; curY += rowHeights[i] + PAD; });
+
+  const slotMap = {};
+  slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
+
+  // For each row: pick the present photos and compute natural height
+  // (height that makes cells fill the full usable width exactly).
+  rowDef.forEach(r => {
+    r.present = r.ids.map(id => slotMap[id]).filter(Boolean);
+    if (!r.present.length) { r.naturalH = 0; return; }
+    const sumRatios = r.present.reduce((a, s) => a + s.ratio, 0);
+    const paddingW = (r.present.length - 1) * PAD;
+    r.naturalH = (USABLE_W - paddingW) / sumRatios;
+  });
+
+  const nonEmpty = rowDef.filter(r => r.naturalH > 0);
+  const totalPad = PAD * Math.max(0, nonEmpty.length - 1);
+  const totalNaturalH = nonEmpty.reduce((a, r) => a + r.naturalH, 0);
+  const availableH = AREA_H - totalPad;
+  // Uniform scale to fit vertically (won't scale up beyond 1 — if there
+  // is extra vertical space we just leave it, keeps aspect ratios true).
+  const vScale = totalNaturalH > 0 ? Math.min(1, availableH / totalNaturalH) : 1;
+  rowDef.forEach(r => r.h = r.naturalH * vScale);
+
+  // Position rows top-to-bottom, skipping empty ones
+  let curY = AREA_Y;
+  rowDef.forEach(r => {
+    if (r.h <= 0) return;
+    r.y = curY;
+    curY += r.h + PAD;
+  });
 
   mosaicLayoutData = [];
-  rowDef.forEach(r => drawRow(ctx, r.ids, r.y, r.h, A4_W, PAD));
+  rowDef.forEach(r => {
+    if (r.h <= 0 || !r.present.length) return;
+    drawRow(ctx, r.present, r.y, r.h, A4_W, PAD, SIDE_MARGIN);
+  });
   setTimeout(updateMosaicOverlay, 60);
 }
 
-function drawRow(ctx, slotIds, y, rowH, totalW, pad) {
-  const slotMap = {};
-  slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
-  const present = slotIds.map(id => slotMap[id]).filter(Boolean);
-  if (!present.length) return;
+function drawRow(ctx, present, y, rowH, totalW, pad, sideMargin) {
   const cellWidths = present.map(s => rowH * s.ratio);
   const totalCellW = cellWidths.reduce((a, b) => a + b, 0) + pad * (present.length - 1);
-  let x = (totalW - totalCellW) / 2;
+  // If all photos of the row are present, totalCellW == USABLE_W (by construction)
+  // so the row goes edge-to-edge. If some are missing we centre what's left.
+  let x = sideMargin + (totalW - 2 * sideMargin - totalCellW) / 2;
   present.forEach((slot, i) => {
     const cw = cellWidths[i];
     const adj = getMosaicAdjust(slot.id);
@@ -2281,6 +2431,34 @@ window.addEventListener('resize', () => {
     setTimeout(updateMosaicOverlay, 100);
   }
 });
+
+// =====================================================
+// MOSAIC ZOOM (lupa) — scales the whole preview (canvas +
+// drag/resize overlay together) so it's easier to see/work
+// with on screen. Does NOT affect the exported JPG, which is
+// always rendered at full A4 resolution.
+// =====================================================
+let mosaicZoom = 1;
+function applyMosaicZoom() {
+  const wrap = document.getElementById('mosaic-wrap');
+  if (!wrap) return;
+  wrap.style.transform = `scale(${mosaicZoom})`;
+  const label = document.getElementById('mosaic-zoom-label');
+  if (label) label.textContent = Math.round(mosaicZoom * 100) + '%';
+  const slider = document.getElementById('mosaic-zoom-slider');
+  if (slider) slider.value = mosaicZoom;
+  // Overlay handle positions depend on the on-screen canvas rect,
+  // which changes with the zoom transform — recompute them.
+  updateMosaicOverlay();
+}
+function zoomMosaic(delta) {
+  mosaicZoom = Math.max(0.5, Math.min(3, +(mosaicZoom + delta).toFixed(2)));
+  applyMosaicZoom();
+}
+function setMosaicZoom(v) {
+  mosaicZoom = Math.max(0.5, Math.min(3, +v));
+  applyMosaicZoom();
+}
 
 function downloadMosaic() {
   const canvas = document.getElementById('mosaic-canvas-el');
