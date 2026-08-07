@@ -2257,22 +2257,50 @@ function drawMosaic() {
     { ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
     { ids: ['labios_reposo', 'labios_sonrisa'] },
   ];
-  // Cap each row's height so its cells never fall off the sheet.
-  // Row 1 (4 caras 3:4) and Row 2 (3 intraorales 3:2) at their weighted
-  // heights sum wider than A4 → the outer photos were being clipped by
-  // the canvas edge (showing as black slivers behind the drag overlay).
-  // Rows that already fit keep their target weighted height.
   const slotMap = {};
   slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
   const AVAILABLE_ROW_W = A4_W - 2 * SIDE_MARGIN;
-  rowDef.forEach((r, i) => {
-    const present = r.ids.map(id => slotMap[id]).filter(Boolean);
-    if (!present.length) { r.h = targetHeights[i]; return; }
-    const sumRatios = present.reduce((a, s) => a + s.ratio, 0);
-    const paddingW = (present.length - 1) * PAD;
-    const maxHForFit = (AVAILABLE_ROW_W - paddingW) / sumRatios;
-    r.h = Math.min(targetHeights[i], maxHForFit);
+
+  // STEP 1 — compute each row's WIDTH CAP: the tallest that row can be
+  // before its cells would overflow the A4 sheet. Rows 1 (4 caras 3:4)
+  // and 2 (3 intraorales 3:2) get capped here; the rest fit comfortably
+  // at their weighted target height.
+  rowDef.forEach(r => {
+    r.present = r.ids.map(id => slotMap[id]).filter(Boolean);
+    if (!r.present.length) { r.maxH = 0; return; }
+    const sumRatios = r.present.reduce((a, s) => a + s.ratio, 0);
+    const paddingW = (r.present.length - 1) * PAD;
+    r.maxH = (AVAILABLE_ROW_W - paddingW) / sumRatios;
   });
+
+  // STEP 2 — initial height = min(target, maxH). Rows 1/2 hit their caps,
+  // leaving vertical empty space at the bottom of the sheet.
+  rowDef.forEach((r, i) => { r.h = Math.min(targetHeights[i], r.maxH); });
+
+  // STEP 3 — redistribute leftover vertical space to rows that CAN still
+  // grow (i.e. not already at their width cap), proportional to their
+  // weighted target height, without ever exceeding each row's cap.
+  // Iterated a few times in case one row hits its cap during the pass
+  // and there's still space left to give to the others.
+  for (let iter = 0; iter < 5; iter++) {
+    const used = rowDef.reduce((a, r) => a + r.h, 0);
+    let leftover = usableH - used;
+    if (leftover <= 0.5) break;
+    const growable = [];
+    let sumTargets = 0;
+    rowDef.forEach((r, i) => {
+      if (r.present.length && r.h < r.maxH - 0.1) {
+        growable.push({ row: r, target: targetHeights[i], room: r.maxH - r.h });
+        sumTargets += targetHeights[i];
+      }
+    });
+    if (!growable.length || sumTargets <= 0) break;
+    growable.forEach(g => {
+      const share = leftover * g.target / sumTargets;
+      g.row.h += Math.min(share, g.room);
+    });
+  }
+
   let curY = AREA_Y;
   rowDef.forEach(r => { r.y = curY; curY += r.h + PAD; });
 
