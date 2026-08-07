@@ -270,7 +270,7 @@
     </div>
 
     <div class="action-btns">
-      <button class="btn-primary" onclick="switchView('mosaic')">🗂 Generar Mosaico A4</button>
+      <button class="btn-primary" onclick="generateAndDownloadMosaic()">🗂 Generar y descargar Mosaico A4</button>
       <button class="btn-secondary" onclick="downloadAllCropped()">📦 Descargar ZIP (fotos + mosaico)</button>
       <div style="display:flex; gap:6px;">
         <button class="btn-secondary" style="flex:1" onclick="saveSessionFile()">💾 Guardar sesión</button>
@@ -2208,52 +2208,48 @@ function drawMosaic() {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, A4_W, A4_H);
-  // Header sized so patient name + date are legible in printed A4
-  const HEADER_H = 270;
+  // Header — compact banner. Text is centred in the space to the
+  // RIGHT of the logo (not on the whole canvas width) so the date
+  // line can't collide with the logo on the left.
+  const HEADER_H = 155;
   ctx.fillStyle = '#1a2540';
   ctx.fillRect(0, 0, A4_W, HEADER_H);
+  let textLeft = 30;
   if (logoImg) {
-    // Bigger logo, vertically centred inside the header
-    const lh = 220, lw = logoImg.width * (lh / logoImg.height);
+    const lh = 95, lw = logoImg.width * (lh / logoImg.height);
     const ly = (HEADER_H - lh) / 2;
     ctx.drawImage(logoImg, 30, ly, lw, lh);
+    textLeft = 30 + lw + 20;
   } else {
     ctx.fillStyle = '#4f8ef7';
-    ctx.font = 'bold 60px sans-serif';
-    ctx.fillText('FOURDEN', 30, 160);
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillText('FOURDEN', 30, 100);
+    textLeft = 30 + 260;
   }
+  const textRight = A4_W - 30;
+  const textCenter = (textLeft + textRight) / 2;
   const name = document.getElementById('patient-name').value || 'Paciente';
   const dob = document.getElementById('patient-dob').value;
   const date = document.getElementById('patient-date').value;
   const fmt = d => d ? d.split('-').reverse().join('/') : '—';
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 62px sans-serif';
+  ctx.font = 'bold 44px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(name.toUpperCase(), A4_W / 2, 115);
-  ctx.font = '52px sans-serif';
-  ctx.fillStyle = '#e2e8f5';
-  ctx.fillText('F. Nacimiento: ' + fmt(dob) + '   ·   Exploración: ' + fmt(date), A4_W / 2, 205);
+  ctx.fillText(name.toUpperCase(), textCenter, 66);
+  ctx.font = '32px sans-serif';
+  ctx.fillStyle = '#dbe2f2';
+  ctx.fillText('F. Nacimiento: ' + fmt(dob) + '   ·   Exploración: ' + fmt(date), textCenter, 118);
   ctx.textAlign = 'left';
 
-  // =========================================================
-  // MOSAIC LAYOUT — WIDTH-FIRST
-  // The old system used fixed per-row weights and then derived
-  // cell width from row height (cellW = rowH * ratio). With the
-  // real photo ratios that overflows the A4 canvas (row 1 = 4x3:4
-  // gives 1678px on a 1654px sheet, row 2 = 3x3:2 gives 1702px).
-  // New approach: for each row we compute the row height that
-  // makes its cells EXACTLY fill the usable width, then scale all
-  // rows uniformly if they don't fit vertically. Result: every
-  // row goes edge-to-edge and cell sizes are consistent with the
-  // photo aspect ratios.
-  // =========================================================
   const PAD = 14;
-  const SIDE_MARGIN = 28;
+  const SIDE_MARGIN = 12;
   const AREA_Y = HEADER_H + PAD;
   const BOTTOM_RESERVE = 40;
   const AREA_H = A4_H - AREA_Y - BOTTOM_RESERVE;
-  const USABLE_W = A4_W - 2 * SIDE_MARGIN;
-
+  const weights = [1.10, 0.75, 0.95, 0.75, 0.50];
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  const usableH = AREA_H - PAD * 4;
+  const targetHeights = weights.map(w => usableH * (w / totalW));
   const rowDef = [
     { ids: ['frontal_reposo', 'frontal_sonrisa', 'perfil_der', 'semiperfil'] },
     { ids: ['lateral_der_ocl', 'frontal_ocl', 'lateral_izq_ocl'] },
@@ -2261,51 +2257,38 @@ function drawMosaic() {
     { ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
     { ids: ['labios_reposo', 'labios_sonrisa'] },
   ];
-
+  // Cap each row's height so its cells never fall off the sheet.
+  // Row 1 (4 caras 3:4) and Row 2 (3 intraorales 3:2) at their weighted
+  // heights sum wider than A4 → the outer photos were being clipped by
+  // the canvas edge (showing as black slivers behind the drag overlay).
+  // Rows that already fit keep their target weighted height.
   const slotMap = {};
   slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
-
-  // For each row: pick the present photos and compute natural height
-  // (height that makes cells fill the full usable width exactly).
-  rowDef.forEach(r => {
-    r.present = r.ids.map(id => slotMap[id]).filter(Boolean);
-    if (!r.present.length) { r.naturalH = 0; return; }
-    const sumRatios = r.present.reduce((a, s) => a + s.ratio, 0);
-    const paddingW = (r.present.length - 1) * PAD;
-    r.naturalH = (USABLE_W - paddingW) / sumRatios;
+  const AVAILABLE_ROW_W = A4_W - 2 * SIDE_MARGIN;
+  rowDef.forEach((r, i) => {
+    const present = r.ids.map(id => slotMap[id]).filter(Boolean);
+    if (!present.length) { r.h = targetHeights[i]; return; }
+    const sumRatios = present.reduce((a, s) => a + s.ratio, 0);
+    const paddingW = (present.length - 1) * PAD;
+    const maxHForFit = (AVAILABLE_ROW_W - paddingW) / sumRatios;
+    r.h = Math.min(targetHeights[i], maxHForFit);
   });
-
-  const nonEmpty = rowDef.filter(r => r.naturalH > 0);
-  const totalPad = PAD * Math.max(0, nonEmpty.length - 1);
-  const totalNaturalH = nonEmpty.reduce((a, r) => a + r.naturalH, 0);
-  const availableH = AREA_H - totalPad;
-  // Uniform scale to fit vertically (won't scale up beyond 1 — if there
-  // is extra vertical space we just leave it, keeps aspect ratios true).
-  const vScale = totalNaturalH > 0 ? Math.min(1, availableH / totalNaturalH) : 1;
-  rowDef.forEach(r => r.h = r.naturalH * vScale);
-
-  // Position rows top-to-bottom, skipping empty ones
   let curY = AREA_Y;
-  rowDef.forEach(r => {
-    if (r.h <= 0) return;
-    r.y = curY;
-    curY += r.h + PAD;
-  });
+  rowDef.forEach(r => { r.y = curY; curY += r.h + PAD; });
 
   mosaicLayoutData = [];
-  rowDef.forEach(r => {
-    if (r.h <= 0 || !r.present.length) return;
-    drawRow(ctx, r.present, r.y, r.h, A4_W, PAD, SIDE_MARGIN);
-  });
+  rowDef.forEach(r => drawRow(ctx, r.ids, r.y, r.h, A4_W, PAD));
   setTimeout(updateMosaicOverlay, 60);
 }
 
-function drawRow(ctx, present, y, rowH, totalW, pad, sideMargin) {
+function drawRow(ctx, slotIds, y, rowH, totalW, pad) {
+  const slotMap = {};
+  slots.forEach(s => { if (s.croppedCanvas) slotMap[s.id] = s; });
+  const present = slotIds.map(id => slotMap[id]).filter(Boolean);
+  if (!present.length) return;
   const cellWidths = present.map(s => rowH * s.ratio);
   const totalCellW = cellWidths.reduce((a, b) => a + b, 0) + pad * (present.length - 1);
-  // If all photos of the row are present, totalCellW == USABLE_W (by construction)
-  // so the row goes edge-to-edge. If some are missing we centre what's left.
-  let x = sideMargin + (totalW - 2 * sideMargin - totalCellW) / 2;
+  let x = (totalW - totalCellW) / 2;
   present.forEach((slot, i) => {
     const cw = cellWidths[i];
     const adj = getMosaicAdjust(slot.id);
@@ -2340,17 +2323,24 @@ function updateMosaicOverlay() {
   const overlay = document.getElementById('mosaic-overlay');
   overlay.innerHTML = '';
   const canvas = document.getElementById('mosaic-canvas-el');
-  const rect = canvas.getBoundingClientRect();
-  const sx = rect.width / A4_W;
-  const sy = rect.height / A4_H;
+  // TWO scales:
+  //  - layoutSx: offsetWidth / A4_W — ignores CSS transforms on ancestors
+  //    (in particular the mosaic-zoom transform:scale on the wrap). Used to
+  //    POSITION the overlay handles so they sit exactly on the canvas cells
+  //    regardless of the zoom level.
+  //  - screenSx: getBoundingClientRect().width / A4_W — includes the zoom.
+  //    Used inside the drag handlers to convert client-pixel mouse deltas
+  //    into A4-canvas-pixel deltas.
+  const layoutSx = canvas.offsetWidth / A4_W;
+  const layoutSy = canvas.offsetHeight / A4_H;
   if (!mosaicLayoutData) return;
   mosaicLayoutData.forEach(data => {
     const wrap = document.createElement('div');
     wrap.className = 'photo-handle-overlay';
-    wrap.style.left = (data.x * sx) + 'px';
-    wrap.style.top = (data.y * sy) + 'px';
-    wrap.style.width = (data.w * sx) + 'px';
-    wrap.style.height = (data.h * sy) + 'px';
+    wrap.style.left = (data.x * layoutSx) + 'px';
+    wrap.style.top = (data.y * layoutSy) + 'px';
+    wrap.style.width = (data.w * layoutSx) + 'px';
+    wrap.style.height = (data.h * layoutSy) + 'px';
     wrap.dataset.slotId = data.slotId;
 
     // Drag body — moves the photo (both X and Y)
@@ -2362,9 +2352,12 @@ function updateMosaicOverlay() {
       const slotId = data.slotId;
       const adj = getMosaicAdjust(slotId);
       const startX0 = adj.xOffset, startY0 = adj.yOffset;
+      const rectC = canvas.getBoundingClientRect();
+      const screenSx = rectC.width / A4_W;
+      const screenSy = rectC.height / A4_H;
       const onMove = ev => {
-        const dx = (ev.clientX - startX) / sx;
-        const dy = (ev.clientY - startY) / sy;
+        const dx = (ev.clientX - startX) / screenSx;
+        const dy = (ev.clientY - startY) / screenSy;
         adj.xOffset = startX0 + dx;
         adj.yOffset = startY0 + dy;
         drawMosaicQuick();
@@ -2390,16 +2383,17 @@ function updateMosaicOverlay() {
         const slotId = data.slotId;
         const adj = getMosaicAdjust(slotId);
         const startScale = adj.scale;
-        // Use diagonal distance from center for scale change
-        const cx = data.x + data.w/2;
-        const cy = data.y + data.h/2;
+        const cx = data.x + data.w / 2;
+        const cy = data.y + data.h / 2;
         const rectC = canvas.getBoundingClientRect();
-        const canvasStartX = (startX - rectC.left) / sx;
-        const canvasStartY = (startY - rectC.top) / sy;
+        const screenSx = rectC.width / A4_W;
+        const screenSy = rectC.height / A4_H;
+        const canvasStartX = (startX - rectC.left) / screenSx;
+        const canvasStartY = (startY - rectC.top) / screenSy;
         const startDist = Math.hypot(canvasStartX - cx, canvasStartY - cy);
         const onMove = ev => {
-          const cxNow = (ev.clientX - rectC.left) / sx;
-          const cyNow = (ev.clientY - rectC.top) / sy;
+          const cxNow = (ev.clientX - rectC.left) / screenSx;
+          const cyNow = (ev.clientY - rectC.top) / screenSy;
           const nowDist = Math.hypot(cxNow - cx, cyNow - cy);
           const newScale = startScale * (nowDist / Math.max(10, startDist));
           adj.scale = Math.max(0.5, Math.min(3, newScale));
@@ -2462,6 +2456,7 @@ function setMosaicZoom(v) {
 
 function downloadMosaic() {
   const canvas = document.getElementById('mosaic-canvas-el');
+  if (!canvas || !canvas.width) { toast('El mosaico aún no está listo — inténtalo de nuevo', 'error'); return; }
   const name = (document.getElementById('patient-name').value.trim().replace(/\s+/g, '_') || 'paciente');
   const date = (document.getElementById('patient-date').value.replace(/-/g, '') || 'sin_fecha');
   const link = document.createElement('a');
@@ -2469,6 +2464,23 @@ function downloadMosaic() {
   link.href = canvas.toDataURL('image/jpeg', .95);
   link.click();
   toast('Descargando mosaico A4', 'success');
+}
+
+// Convenience wrapper for the big purple button in the left panel:
+// switch to the mosaic view, draw it, then trigger the JPG download.
+// Waits two animation frames + a short timeout so the canvas has been
+// fully redrawn (drawMosaic uses setTimeout for the overlay).
+async function generateAndDownloadMosaic() {
+  const required = slots.filter(s => !s.optional);
+  const loaded = required.filter(s => s.croppedCanvas);
+  if (!loaded.length) { toast('Confirma al menos una foto antes de generar el mosaico', 'error'); return; }
+  switchView('mosaic');
+  // Wait for layout to settle, then redraw at full resolution to guarantee
+  // the JPG matches what's on screen, then export.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  drawMosaic();
+  await new Promise(r => setTimeout(r, 120));
+  downloadMosaic();
 }
 async function downloadAllCropped() {
   const all = getAllSlots().filter(s => s.croppedCanvas);
