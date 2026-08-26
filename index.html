@@ -101,6 +101,12 @@
   .guide-line::before { content: 'PLANO OCLUSAL'; position: absolute; right: 0; top: -16px; background: var(--yellow); color: #000; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; font-weight: 600; }
   .guide-vertical { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--accent); pointer-events: auto; cursor: ew-resize; z-index: 20; }
   .guide-vertical::before { content: 'LÍNEA MEDIA'; position: absolute; bottom: 0; left: 4px; background: var(--accent); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; font-weight: 600; }
+  /* Anatomical guide overlay — anchored inside the crop box, non-interactive */
+  .crop-guides { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 15; }
+  .crop-guides .g-hline { position: absolute; left: 0; right: 0; height: 12px; margin-top: -6px; border-top: 1.5px dashed rgba(255,255,255,.55); pointer-events: auto; cursor: ns-resize; }
+  .crop-guides .g-vline { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; border-left: 1.5px dashed rgba(255,255,255,.55); pointer-events: auto; cursor: ew-resize; }
+  .crop-guides .g-hline:hover, .crop-guides .g-vline:hover { border-color: #fff; }
+  .crop-guides .g-label { position: absolute; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: 'DM Mono', monospace; font-weight: 600; letter-spacing: .3px; white-space: nowrap; color: #000; pointer-events: none; }
   .crop-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
   .crop-action-btn { padding: 7px 13px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; }
   .crop-action-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -301,9 +307,18 @@
       <div class="tool-sep"></div>
       <button class="tool-btn" id="btn-guide-h" onclick="toggleGuideH()">─ Plano</button>
       <button class="tool-btn" id="btn-guide-v" onclick="toggleGuideV()">│ L. media</button>
+      <button class="tool-btn" id="btn-guide-anat" onclick="toggleAnatGuides()" title="Guías anatómicas por tipo de foto">🎯 Guías anat.</button>
+      <button class="tool-btn" onclick="resetAnatGuidesForCurrent()" title="Restablecer posiciones de las guías anatómicas de este tipo de foto">⟲ Reset guías</button>
+      <button class="tool-btn" onclick="startPointCalibration()" title="Marca 3 puntos anatómicos (pelo, nariz, mentón) y auto-recorto para encuadre consistente entre pacientes">📍 Marcar 3 puntos</button>
       <div class="tool-sep"></div>
       <button class="tool-btn" onclick="toggleFreeRatio()" id="btn-free-ratio" title="Cambiar ratio libre/fijo">📐 Ratio</button>
       <button class="tool-btn" onclick="resetCropBox()">⊡ Reset</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" onclick="setCropZoom(cropZoom - 0.2)" title="Alejar imagen">🔍−</button>
+      <input type="range" id="crop-zoom-slider" min="0.5" max="3" step="0.1" value="1" oninput="setCropZoom(parseFloat(this.value))" style="width:100px;accent-color:var(--accent);">
+      <button class="tool-btn" onclick="setCropZoom(cropZoom + 0.2)" title="Acercar imagen">🔍+</button>
+      <span id="crop-zoom-label" style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text2);min-width:38px;text-align:center;">100%</span>
+      <button class="tool-btn" onclick="setCropZoom(1)" title="Zoom 100%">1:1</button>
     </div>
 
     <div class="canvas-wrapper" id="crop-canvas-wrapper">
@@ -320,6 +335,7 @@
           <div class="crop-container" id="crop-container">
             <img id="crop-img" alt="">
             <div class="crop-box" id="crop-box">
+              <div class="crop-guides" id="crop-guides"></div>
               <div class="crop-handle tl" data-dir="tl"></div>
               <div class="crop-handle tr" data-dir="tr"></div>
               <div class="crop-handle bl" data-dir="bl"></div>
@@ -506,10 +522,10 @@
 // (for shared crop between related photos).
 // =====================================================
 const SET_SLOTS = [
-  { id: 'frontal_reposo',  name: 'FRONTAL',                  group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 3/4,  icon: '😐', row: 1 },
-  { id: 'frontal_sonrisa', name: 'FRONTAL SONRISA',          group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 3/4,  icon: '😊', row: 1 },
-  { id: 'perfil_der',      name: 'PERFIL',                   group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 3/4,  icon: '👤', row: 1 },
-  { id: 'semiperfil',      name: 'PERFIL MIRADA',            group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 3/4,  icon: '👥', row: 1 },
+  { id: 'frontal_reposo',  name: 'FRONTAL',                  group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 4/5,  icon: '😐', row: 1 },
+  { id: 'frontal_sonrisa', name: 'FRONTAL SONRISA',          group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_frontal_ext',   ratio: 4/5,  icon: '😊', row: 1 },
+  { id: 'perfil_der',      name: 'PERFIL',                   group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 4/5,  icon: '👤', row: 1 },
+  { id: 'semiperfil',      name: 'PERFIL MIRADA',            group: 'EXTRAORAL',     colorRow: 'row_cara',      pack: 'pack_perfil',        ratio: 4/5,  icon: '👥', row: 1 },
   { id: 'lateral_der_ocl', name: 'LATERAL DERECHO',          group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_laterales_ocl', ratio: 3/2,  icon: '🦷', row: 2 },
   { id: 'frontal_ocl',     name: 'FRONTAL DENTAL',           group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_intra_frontal', ratio: 3/2,  icon: '🦷', row: 2 },
   { id: 'lateral_izq_ocl', name: 'LATERAL IZQUIERDO',        group: 'INTRAORAL OCL', colorRow: 'row_intra_ocl', pack: 'pack_laterales_ocl', ratio: 3/2, icon: '🦷', row: 2 },
@@ -518,12 +534,12 @@ const SET_SLOTS = [
   { id: 'canino_der',      name: 'LATERAL CANINO DERECHO',   group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_caninos',       ratio: 4/5,  icon: '🦷', row: 4 },
   { id: 'frontal_abierta', name: 'FRONTAL DENTAL INFERIOR',  group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_intra_frontal', ratio: 3/2,  icon: '🦷', row: 4 },
   { id: 'canino_izq',      name: 'LATERAL CANINO IZQUIERDO', group: 'CANINOS',       colorRow: 'row_caninos',   pack: 'pack_caninos',       ratio: 4/5,  icon: '🦷', row: 4 },
-  { id: 'labios_reposo',   name: 'LABIOS REPOSO',            group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 16/9, icon: '👄', row: 5 },
-  { id: 'labios_sonrisa',  name: 'LABIOS SONRISA',           group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 16/9, icon: '😁', row: 5 },
+  { id: 'labios_reposo',   name: 'LABIOS REPOSO',            group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 3/2,  icon: '👄', row: 5 },
+  { id: 'labios_sonrisa',  name: 'LABIOS SONRISA',           group: 'DETALLES',      colorRow: 'row_labios',    pack: 'pack_labios',        ratio: 3/2,  icon: '😁', row: 5 },
   // Extras — always visible but optional (not part of the 5-row mosaic)
   { id: 'frontal_dental_abierta', name: 'FRONTAL DENTAL ABIERTA', group: 'EXTRAS', colorRow: 'row_caninos', pack: null, ratio: 3/2, icon: '🦷', row: 0, optional: true },
-  { id: 'perfil_sonrisa',         name: 'PERFIL SONRISA',         group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 3/4, icon: '👤', row: 0, optional: true },
-  { id: 'perfil_mirada_sonrisa',  name: 'PERFIL MIRADA SONRISA',  group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 3/4, icon: '👥', row: 0, optional: true },
+  { id: 'perfil_sonrisa',         name: 'PERFIL SONRISA',         group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 4/5, icon: '👤', row: 0, optional: true },
+  { id: 'perfil_mirada_sonrisa',  name: 'PERFIL MIRADA SONRISA',  group: 'EXTRAS', colorRow: 'row_cara',    pack: null, ratio: 4/5, icon: '👥', row: 0, optional: true },
 ];
 
 // Available extra photo types (from Fourden system)
@@ -608,18 +624,29 @@ function formatRatio(r) {
 
 function buildFilter(slot) {
   const b = slot.brightness || 100, c = slot.contrast || 100, s = slot.saturation || 100, w = slot.warmth || 0;
-  // When everything is default, return 'none' to avoid CSS filter color artifacts
   if (b === 100 && c === 100 && s === 100 && w === 0) return 'none';
-  // POWER-LAW COMPENSATION: less aggressive (0.5 instead of 0.9)
-  // brightness 122 → effectiveSat = 91% (subtle, not pale)
+  // CSS brightness() is a LINEAR multiplier: it clips specular highlights
+  // (enamel gleam, gum reflections) to pure white/yellow/red and blows
+  // them out. The committed cropped canvas fixes this by using a proper
+  // hue-preserving gamma per pixel (see applyColorFilterToCanvas).
+  // For the LIVE PREVIEW we can't easily run gamma in CSS, so we use a
+  // reduced brightness — it visually approximates the mid-tone lift of
+  // the gamma without triggering as much highlight clipping. The preview
+  // and the final render therefore look close, and the final render
+  // fully protects the highlights.
+  const cssBright = 100 + (b - 100) * 0.6;
+  // Saturation compensation is now based on the actual CSS brightness
+  // that will be applied (not the nominal slider value), keeping skin
+  // and lip colours from washing out under the preview.
   let effectiveSat = s;
-  if (b > 0 && b !== 100) {
-    effectiveSat = s * Math.pow(100 / b, 0.5);
+  if (cssBright > 0 && cssBright !== 100) {
+    effectiveSat = s * Math.pow(100 / cssBright, 0.28);
+    if (cssBright > 100) effectiveSat *= 1 + Math.min(0.05, (cssBright - 100) / 800);
   }
-  effectiveSat = Math.max(20, Math.min(200, effectiveSat));
+  effectiveSat = Math.max(20, Math.min(210, effectiveSat));
   const sepia = Math.max(0, w) / 100;
   const hueRot = w < 0 ? Math.abs(w) * .5 : 0;
-  return `brightness(${b}%) contrast(${c}%) saturate(${effectiveSat.toFixed(1)}%) sepia(${sepia}) hue-rotate(${-hueRot}deg)`;
+  return `brightness(${cssBright.toFixed(1)}%) contrast(${c}%) saturate(${effectiveSat.toFixed(1)}%) sepia(${sepia}) hue-rotate(${-hueRot}deg)`;
 }
 
 function toast(msg, type) {
@@ -800,7 +827,9 @@ function createExtraSlot(name, icon) {
     imgSrc: null, imgEl: null, croppedCanvas: null, croppedCanvasOriginal: null, thumbDataUrl: null,
     rotation: 0, fineRotation: 0, flipH: false, flipV: false,
     brightness: 100, contrast: 100, saturation: 100, warmth: 0,
-    cropBoxData: null, isColorRef: false, colorStats: null
+    cropBoxData: null, isColorRef: false, colorStats: null,
+    // Fotos extra: recorte libre desde el inicio — el usuario decide el ratio.
+    _freeRatio: true
   });
   renderPhotoList();
   toast(`Añadida: ${name}`, 'success');
@@ -861,7 +890,7 @@ function updatePackBanner(slot) {
     if (master && master.id !== slot.id) {
       packTag.textContent = `PACK · sigue a ${master.name}`;
       packBanner.style.display = 'flex';
-      packBannerText.innerHTML = `Encuadre copiado de <b>"${master.name}"</b>. Ajusta la posición si es necesario y confirma.`;
+      packBannerText.innerHTML = `Encuadre copiado de <b>"${master.name}"</b>. Si el paciente estaba a distinta distancia, redimensiona el recuadro para que la anatomía coincida con la silueta y confirma.`;
       return;
     } else if (master && master.id === slot.id) {
       packTag.textContent = '★ MASTER del pack';
@@ -1069,6 +1098,7 @@ function initCropBox(slot) {
   cropContainerEl.dataset.offY = offY;
   cropContainerEl.dataset.imgW = imgW;
   cropContainerEl.dataset.imgH = imgH;
+  updateAnatGuides();
 }
 
 function resetCropBox() {
@@ -1227,6 +1257,499 @@ function setupGuideHandlers() {
   });
 }
 
+// =====================================================
+// MANUAL 3-POINT CALIBRATION for face photos
+// El clínico pincha 3 puntos anatómicos (pelo, nariz,
+// mentón) y el software calcula el crop-box que los sitúa
+// SIEMPRE en las mismas posiciones normalizadas del recorte.
+// Cualquier tipo de cara (larga, redonda, con más o menos
+// frente) queda encuadrado con las mismas proporciones.
+// =====================================================
+const FACE_SLOT_IDS = new Set([
+  'frontal_reposo', 'frontal_sonrisa',
+  'perfil_der', 'semiperfil',
+  'perfil_sonrisa', 'perfil_mirada_sonrisa'
+]);
+function isProfileSlot(id) {
+  return id === 'perfil_der' || id === 'semiperfil'
+      || id === 'perfil_sonrisa' || id === 'perfil_mirada_sonrisa';
+}
+
+let _calibState = null;
+
+function _calibLabel(step) {
+  const titles = ['LÍMITE DEL PELO', 'PUNTA DE LA NARIZ', 'FINAL DE LA BARBILLA'];
+  const hints  = [
+    'Pincha donde nace el pelo en la frente',
+    'Pincha en el extremo inferior de la nariz (o la punta si es perfil)',
+    'Pincha en el punto más bajo del mentón'
+  ];
+  return { title: titles[step], hint: hints[step] };
+}
+
+function _calibShowPrompt() {
+  const s = _calibState;
+  const info = _calibLabel(s.step);
+  const panel = document.getElementById('calibration-panel');
+  if (!panel) return;
+  document.getElementById('calib-step-num').textContent = (s.step + 1);
+  document.getElementById('calib-title').textContent = info.title;
+  document.getElementById('calib-hint').textContent = info.hint;
+  panel.style.display = 'flex';
+}
+
+function _calibDrawMarker(idx, xClient, yClient) {
+  const contRect = cropContainerEl.getBoundingClientRect();
+  const localX = xClient - contRect.left;
+  const localY = yClient - contRect.top;
+  const dot = document.createElement('div');
+  dot.className = 'calib-marker';
+  dot.style.cssText = `position:absolute;left:${localX - 12}px;top:${localY - 12}px;width:24px;height:24px;border-radius:50%;background:rgba(247,201,72,0.85);border:2.5px solid #000;color:#000;font-family:'DM Mono',monospace;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:35;pointer-events:none;box-shadow:0 0 4px rgba(0,0,0,.6);`;
+  dot.textContent = idx;
+  document.getElementById('calibration-overlay').appendChild(dot);
+}
+
+function _calibClearMarkers() {
+  document.querySelectorAll('.calib-marker').forEach(el => el.remove());
+}
+
+function _calibFinish() {
+  const s = _calibState;
+  const slot = s.slot;
+  const [hair, nose, chin] = s.points;
+  const ratio = slot.ratio;
+
+  // TARGET normalised Y positions inside the CROP:
+  //   pelo   → 8 %  (deja margen arriba)
+  //   nariz  → 50 % (centro del rostro)
+  //   mentón → 82 % (margen abajo para cuello/hombros)
+  // Pelo y mentón un pelín más pegados al borde → un poco más de zoom en cara
+  const T_HAIR = 0.07;
+  const T_CHIN = 0.88;
+
+  // Crop height from hair→chin span
+  const range = Math.max(0.02, chin.y - hair.y);
+  const cropH_norm = range / (T_CHIN - T_HAIR);
+  const cropW_norm = cropH_norm * ratio * (s.img.naturalHeight / s.img.naturalWidth);
+
+  // Crop TOP so pelo cae en T_HAIR
+  const cropTop_norm = hair.y - T_HAIR * cropH_norm;
+
+  // Crop LEFT:
+  //   frontal → centrar sobre la media horizontal de los 3 puntos
+  //   perfil / semiperfil → nariz al 70 % (o 30 %) del ancho del recorte,
+  //                         según hacia dónde mire la cara
+  let cropLeft_norm;
+  if (!s.isProfile) {
+    const midX = (hair.x + nose.x + chin.x) / 3;
+    cropLeft_norm = midX - cropW_norm / 2;
+  } else {
+    const rightFacing = nose.x > hair.x;   // nariz por delante del pelo
+    // Nariz cerca del borde delantero del recorte (80 % / 20 %) → la cara
+    // ocupa el ancho completo y coincide con la silueta centrada.
+    const noseTargetX = rightFacing ? 0.80 : 0.20;
+    cropLeft_norm = nose.x - noseTargetX * cropW_norm;
+  }
+
+  // Clamp inside the image
+  let nx = Math.max(0, Math.min(1 - cropW_norm, cropLeft_norm));
+  let ny = Math.max(0, Math.min(1 - cropH_norm, cropTop_norm));
+  let nw = Math.min(cropW_norm, 1 - nx);
+  let nh = Math.min(cropH_norm, 1 - ny);
+
+  slot.cropBoxData = { normX: nx, normY: ny, normW: nw, normH: nh };
+  _calibCleanup();
+  initCropBox(slot);
+  toast('✓ Encuadre calibrado con tus 3 puntos anatómicos', 'success');
+}
+
+function _calibCleanup() {
+  _calibClearMarkers();
+  const ov = document.getElementById('calibration-overlay');
+  if (ov) ov.style.display = 'none';
+  const pn = document.getElementById('calibration-panel');
+  if (pn) pn.style.display = 'none';
+  _calibState = null;
+  document.removeEventListener('keydown', _calibKeyHandler);
+}
+
+function _calibKeyHandler(e) {
+  if (e.key === 'Escape' && _calibState) {
+    _calibCleanup();
+    toast('Calibración cancelada', 'info');
+  }
+}
+
+function startPointCalibration() {
+  if (currentSlotIdx == null) { toast('Selecciona una foto primero', 'error'); return; }
+  const slot = getSlotByIdx(currentSlotIdx);
+  if (!slot || !slot.imgSrc) { toast('Esta ranura no tiene foto cargada', 'error'); return; }
+  if (!FACE_SLOT_IDS.has(slot.id)) {
+    toast('Calibrar puntos solo tiene sentido en fotos de cara (frontal, sonrisa, perfil, semiperfil)', 'info');
+    return;
+  }
+  if (!cropImgEl.naturalWidth) { toast('La imagen aún se está cargando', 'error'); return; }
+  _calibState = {
+    slot,
+    isProfile: isProfileSlot(slot.id),
+    img: cropImgEl,
+    step: 0,
+    points: []
+  };
+  // Show overlay
+  let ov = document.getElementById('calibration-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'calibration-overlay';
+    ov.style.cssText = 'position:absolute;inset:0;z-index:30;cursor:crosshair;background:rgba(0,0,0,0.15);';
+    cropContainerEl.appendChild(ov);
+    ov.addEventListener('click', ev => {
+      if (!_calibState) return;
+      const imgRect = cropImgEl.getBoundingClientRect();
+      const nx = (ev.clientX - imgRect.left) / imgRect.width;
+      const ny = (ev.clientY - imgRect.top) / imgRect.height;
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return;
+      _calibState.points.push({ x: nx, y: ny });
+      _calibDrawMarker(_calibState.points.length, ev.clientX, ev.clientY);
+      _calibState.step++;
+      if (_calibState.step >= 3) { _calibFinish(); }
+      else { _calibShowPrompt(); }
+    });
+  }
+  ov.style.display = 'block';
+  // Create instruction panel if not present
+  let panel = document.getElementById('calibration-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'calibration-panel';
+    panel.style.cssText = 'position:absolute;top:10px;left:10px;right:10px;background:rgba(20,25,40,0.94);color:#fff;padding:12px 16px;border-radius:10px;z-index:40;font-family:"DM Mono",monospace;display:flex;align-items:center;gap:14px;box-shadow:0 6px 16px rgba(0,0,0,.4);border:1px solid rgba(247,201,72,0.7);';
+    panel.innerHTML = `
+      <div id="calib-step-num" style="font-size:26px;font-weight:700;color:#f7c948;min-width:32px;text-align:center;">1</div>
+      <div style="flex:1;min-width:0;">
+        <div id="calib-title" style="font-size:15px;font-weight:700;color:#f7c948;letter-spacing:.3px;"></div>
+        <div id="calib-hint"  style="font-size:11.5px;color:#c8d0e6;margin-top:3px;line-height:1.35;"></div>
+      </div>
+      <button onclick="_calibCleanup(); toast('Calibración cancelada','info');" style="background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;">✕ Esc</button>
+    `;
+    cropContainerEl.appendChild(panel);
+  }
+  document.addEventListener('keydown', _calibKeyHandler);
+  _calibShowPrompt();
+}
+
+// =====================================================
+// ANATOMICAL GUIDES — per-photo-type overlay inside the crop box.
+//
+// Positions are the standard orthodontic framing landmarks (eyes, base
+// of nose, lip line, tragus, occlusal plane, sagittal plane, etc.).
+// The user aligns the anatomy of every photo to the same normalised
+// positions so cases are directly comparable across patients.
+//
+// Two layers:
+//  - DEFAULTS: sane starting positions per photo type. Face defaults
+//    leave more air around the head (eyes at 40%, lips at 75%) than a
+//    tight 30/72 layout so the crop doesn't feel cramped. Profile shots
+//    push the eye line even lower (45%) because the profile silhouette
+//    reads better with more headroom + neck.
+//  - PERSONAL OVERRIDES: dragging any guide saves its new position for
+//    that photo type in localStorage, so every future patient inherits
+//    the exact same framing.
+// =====================================================
+let anatGuidesVisible = (function () {
+  try { return localStorage.getItem('fourden_anat_guides') !== '0'; } catch (e) { return true; }
+})();
+let anatGuidesCustom = (function () {
+  try { return JSON.parse(localStorage.getItem('fourden_anat_guides_custom') || '{}'); }
+  catch (e) { return {}; }
+})();
+function saveAnatGuidesCustom() {
+  try { localStorage.setItem('fourden_anat_guides_custom', JSON.stringify(anatGuidesCustom)); } catch (e) {}
+}
+
+function getDefaultAnatGuides(slot) {
+  if (!slot) return [];
+  const id = slot.id;
+  const YEL = '#f7c948', BLU = '#4f8ef7', GRN = '#3ecf8e', RED = '#f25f5c';
+  if (id === 'frontal_reposo' || id === 'frontal_sonrisa') {
+    return [
+      { type: 'hline', y: 40, label: 'OJOS',       color: GRN },
+      { type: 'hline', y: 60, label: 'BASE NARIZ', color: YEL },
+      { type: 'hline', y: 75, label: 'LABIOS',     color: RED },
+      { type: 'vline', x: 50, label: 'L. MEDIA',   color: BLU },
+    ];
+  }
+  if (id === 'perfil_der' || id === 'semiperfil' || id === 'perfil_sonrisa' || id === 'perfil_mirada_sonrisa') {
+    return [
+      { type: 'hline', y: 45, label: 'OJOS',   color: GRN },
+      { type: 'hline', y: 78, label: 'LABIOS', color: RED },
+      { type: 'vline', x: 60, label: 'TRAGO',  color: BLU },
+    ];
+  }
+  if (id === 'lateral_der_ocl' || id === 'lateral_izq_ocl') {
+    return [
+      { type: 'hline', y: 50, label: 'PLANO OCLUSAL', color: YEL },
+      { type: 'vline', x: 50, label: 'CANINO',        color: BLU },
+    ];
+  }
+  if (id === 'frontal_ocl' || id === 'frontal_abierta' || id === 'frontal_dental_abierta') {
+    return [
+      { type: 'hline', y: 50, label: 'PLANO OCLUSAL', color: YEL },
+      { type: 'vline', x: 50, label: 'L. MEDIA',      color: BLU },
+    ];
+  }
+  if (id === 'oclusal_sup' || id === 'oclusal_inf') {
+    return [
+      { type: 'vline', x: 50, label: 'PLANO SAGITAL', color: BLU },
+      { type: 'hline', y: 35, label: 'ANTERIORES',    color: YEL },
+      { type: 'hline', y: 70, label: 'MOLARES',       color: YEL },
+    ];
+  }
+  if (id === 'canino_der' || id === 'canino_izq') {
+    return [
+      { type: 'hline', y: 50, label: 'PLANO OCLUSAL', color: YEL },
+      { type: 'vline', x: 50, label: 'CANINO',        color: BLU },
+    ];
+  }
+  if (id === 'labios_reposo' || id === 'labios_sonrisa') {
+    return [
+      { type: 'hline', y: 50, label: 'COMISURAS', color: YEL },
+      { type: 'vline', x: 50, label: 'L. MEDIA',  color: BLU },
+    ];
+  }
+  return [];
+}
+
+// Applies the user's personal overrides on top of the defaults so a saved
+// tweak for e.g. 'frontal_reposo' also propagates to 'frontal_sonrisa'
+// (they share the same guide template).
+function getAnatGuidesForSlot(slot) {
+  if (!slot) return [];
+  const defaults = getDefaultAnatGuides(slot);
+  const key = slot.id;
+  const override = anatGuidesCustom[key];
+  if (!override) return defaults;
+  return defaults.map((g, i) => {
+    const v = override[i];
+    if (v == null) return g;
+    if (g.type === 'hline') return { ...g, y: v };
+    if (g.type === 'vline') return { ...g, x: v };
+    return g;
+  });
+}
+
+// Silhouette templates for every photo type. viewBox aspect matches the
+// slot's crop ratio exactly so the SVG scales cleanly. Kept minimal on
+// purpose: outline of the anatomy + only the essential landmarks. The
+// user drags/scales the crop-box until the real anatomy matches the
+// outline → same framing across every patient. Pack-paired photos
+// (reposo/sonrisa, perfil/perfil mirada, laterales, oclusales, caninos,
+// labios) inherit size + position from the first crop, but the user must
+// re-adjust when the handheld distance changed between shots.
+const FRONTAL_FACE_SVG = `
+<svg viewBox="0 0 300 375" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="180" rx="118" ry="140" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.6)" stroke-width="2.2" stroke-dasharray="6 4"/>
+  <ellipse cx="150" cy="195" rx="95" ry="118" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <line x1="150" y1="25" x2="150" y2="350" stroke="rgba(79,142,247,0.4)" stroke-width="1" stroke-dasharray="5 5"/>
+</svg>`;
+
+// Profile silhouette — slimmer than the frontal so the resulting cropped face
+// doesn't come out visibly larger in the mosaic. No eye marker; the outline
+// alone is enough to align on.
+const PROFILE_FACE_SVG = `
+<svg viewBox="0 0 300 375" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="185" rx="105" ry="140" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.6)" stroke-width="2.2" stroke-dasharray="6 4"/>
+</svg>`;
+
+// Intraoral lateral (3:2) — retractor + occlusal plane + central canine
+const LATERAL_INTRAORAL_SVG = `
+<svg viewBox="0 0 300 200" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="100" rx="138" ry="82" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="6 4"/>
+  <line x1="10" y1="100" x2="290" y2="100" stroke="rgba(247,201,72,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="150" y1="15" x2="150" y2="185" stroke="rgba(79,142,247,0.75)" stroke-width="1.3" stroke-dasharray="4 4"/>
+</svg>`;
+
+const FRONTAL_INTRAORAL_SVG = `
+<svg viewBox="0 0 300 200" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="100" rx="140" ry="82" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M 40 100 Q 150 55, 260 100" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <path d="M 40 100 Q 150 145, 260 100" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <line x1="10" y1="100" x2="290" y2="100" stroke="rgba(247,201,72,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="150" y1="15" x2="150" y2="185" stroke="rgba(79,142,247,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>`;
+
+// Occlusal SUPERIOR — arch opens ∩ (anteriors at TOP, molares extendiéndose hacia abajo)
+const OCCLUSAL_SUP_SVG = `
+<svg viewBox="0 0 300 225" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <path d="M 40 200 Q 40 30, 150 20 Q 260 30, 260 200" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.6)" stroke-width="2.2" stroke-dasharray="6 4"/>
+  <path d="M 90 190 Q 90 60, 150 50 Q 210 60, 210 190" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <line x1="150" y1="10" x2="150" y2="220" stroke="rgba(79,142,247,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>`;
+
+// Occlusal INFERIOR — arch opens ∪ (anteriors at BOTTOM, molares extendiéndose hacia arriba)
+const OCCLUSAL_INF_SVG = `
+<svg viewBox="0 0 300 225" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <path d="M 40 25 Q 40 195, 150 205 Q 260 195, 260 25" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.6)" stroke-width="2.2" stroke-dasharray="6 4"/>
+  <path d="M 90 35 Q 90 165, 150 175 Q 210 165, 210 35" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.3" stroke-dasharray="3 3"/>
+  <line x1="150" y1="10" x2="150" y2="220" stroke="rgba(79,142,247,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>`;
+
+// Canine (crop 4:5) — retractor ovalado en HORIZONTAL (más ancho que alto)
+// porque la boca abierta con retractor se ve más extendida a los lados
+// que en altura. Deja margen arriba y abajo del ovoide dentro del recuadro.
+const CANINE_SVG = `
+<svg viewBox="0 0 300 375" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="187" rx="128" ry="95" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="6 4"/>
+  <line x1="15" y1="187" x2="285" y2="187" stroke="rgba(247,201,72,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="150" y1="20" x2="150" y2="355" stroke="rgba(79,142,247,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>`;
+
+const LIPS_SVG = `
+<svg viewBox="0 0 300 200" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+  <ellipse cx="150" cy="100" rx="138" ry="80" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="6 4"/>
+  <line x1="10" y1="100" x2="290" y2="100" stroke="rgba(247,201,72,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="150" y1="15" x2="150" y2="185" stroke="rgba(79,142,247,0.85)" stroke-width="1.5" stroke-dasharray="5 4"/>
+</svg>`;
+
+function getFaceSilhouetteSVG(slot) {
+  if (!slot) return null;
+  const id = slot.id;
+  if (id === 'frontal_reposo' || id === 'frontal_sonrisa') return FRONTAL_FACE_SVG;
+  if (id === 'perfil_der' || id === 'semiperfil' || id === 'perfil_sonrisa' || id === 'perfil_mirada_sonrisa') return PROFILE_FACE_SVG;
+  if (id === 'lateral_der_ocl' || id === 'lateral_izq_ocl') return LATERAL_INTRAORAL_SVG;
+  if (id === 'frontal_ocl' || id === 'frontal_abierta' || id === 'frontal_dental_abierta') return FRONTAL_INTRAORAL_SVG;
+  if (id === 'oclusal_sup') return OCCLUSAL_SUP_SVG;
+  if (id === 'oclusal_inf') return OCCLUSAL_INF_SVG;
+  if (id === 'canino_der' || id === 'canino_izq') return CANINE_SVG;
+  if (id === 'labios_reposo' || id === 'labios_sonrisa') return LIPS_SVG;
+  return null;
+}
+
+function updateAnatGuides() {
+  const cont = document.getElementById('crop-guides');
+  if (!cont) return;
+  cont.innerHTML = '';
+  const btn = document.getElementById('btn-guide-anat');
+  if (btn) btn.classList.toggle('active', anatGuidesVisible);
+  if (!anatGuidesVisible || currentSlotIdx == null) return;
+  const slot = getSlotByIdx(currentSlotIdx);
+
+  // Face photos: show translucent silhouette template (frontal or profile).
+  // The user pans/scales the crop-box until the real face aligns with the
+  // silhouette → identical framing across every patient of that type.
+  const sil = getFaceSilhouetteSVG(slot);
+  if (sil) { cont.insertAdjacentHTML('beforeend', sil); return; }
+
+  // Non-face types keep the existing draggable anatomical lines.
+  const guides = getAnatGuidesForSlot(slot);
+  guides.forEach((g, idx) => makeGuide(cont, g, idx, slot));
+}
+
+function makeGuide(cont, g, idx, slot) {
+  const isH = g.type === 'hline';
+  const line = document.createElement('div');
+  line.className = isH ? 'g-hline' : 'g-vline';
+  const posPct = isH ? g.y : g.x;
+  if (isH) { line.style.top = posPct + '%'; line.style.borderTopColor = g.color; }
+  else     { line.style.left = posPct + '%'; line.style.borderLeftColor = g.color; }
+  line.title = 'Arrastra para reposicionar (se guarda para ' + slot.name + ')';
+  cont.appendChild(line);
+
+  let labelEl = null;
+  if (g.label) {
+    labelEl = document.createElement('div');
+    labelEl.className = 'g-label';
+    labelEl.textContent = g.label;
+    labelEl.style.background = g.color;
+    labelEl.style.color = isH ? '#000' : '#fff';
+    if (isH) {
+      labelEl.style.top = 'calc(' + posPct + '% - 14px)';
+      labelEl.style.right = '4px';
+    } else {
+      labelEl.style.bottom = '4px';
+      labelEl.style.left = 'calc(' + posPct + '% + 4px)';
+    }
+    cont.appendChild(labelEl);
+  }
+
+  // Drag to reposition — updates in real-time and saves on mouseup.
+  const onDown = (startClientX, startClientY, ev) => {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const boxRect = cropBoxEl.getBoundingClientRect();
+    const total = isH ? boxRect.height : boxRect.width;
+    const startPos = posPct;
+    const startClient = isH ? startClientY : startClientX;
+    let newPct = startPos;
+    const move = (cx, cy) => {
+      const nowClient = isH ? cy : cx;
+      const delta = nowClient - startClient;
+      newPct = Math.max(0, Math.min(100, startPos + delta / total * 100));
+      if (isH) { line.style.top = newPct + '%'; if (labelEl) labelEl.style.top = 'calc(' + newPct + '% - 14px)'; }
+      else     { line.style.left = newPct + '%'; if (labelEl) labelEl.style.left = 'calc(' + newPct + '% + 4px)'; }
+    };
+    const finish = () => {
+      // Save the override
+      const key = slot.id;
+      if (!anatGuidesCustom[key]) anatGuidesCustom[key] = [];
+      anatGuidesCustom[key][idx] = Math.round(newPct * 10) / 10;
+      saveAnatGuidesCustom();
+    };
+    const onMove = ev2 => move(ev2.clientX, ev2.clientY);
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      finish();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+  line.addEventListener('mousedown', e => onDown(e.clientX, e.clientY, e));
+  line.addEventListener('touchstart', e => {
+    const t = e.touches[0]; if (!t) return;
+    const boxRect = cropBoxEl.getBoundingClientRect();
+    const total = isH ? boxRect.height : boxRect.width;
+    const startPos = posPct;
+    const startClient = isH ? t.clientY : t.clientX;
+    let newPct = startPos;
+    const move = (cx, cy) => {
+      const nowClient = isH ? cy : cx;
+      const delta = nowClient - startClient;
+      newPct = Math.max(0, Math.min(100, startPos + delta / total * 100));
+      if (isH) { line.style.top = newPct + '%'; if (labelEl) labelEl.style.top = 'calc(' + newPct + '% - 14px)'; }
+      else     { line.style.left = newPct + '%'; if (labelEl) labelEl.style.left = 'calc(' + newPct + '% + 4px)'; }
+    };
+    const onMove = ev2 => { ev2.preventDefault(); const t2 = ev2.touches[0]; move(t2.clientX, t2.clientY); };
+    const onEnd = () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      const key = slot.id;
+      if (!anatGuidesCustom[key]) anatGuidesCustom[key] = [];
+      anatGuidesCustom[key][idx] = Math.round(newPct * 10) / 10;
+      saveAnatGuidesCustom();
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+  }, { passive: true });
+}
+
+function toggleAnatGuides() {
+  anatGuidesVisible = !anatGuidesVisible;
+  try { localStorage.setItem('fourden_anat_guides', anatGuidesVisible ? '1' : '0'); } catch (e) {}
+  updateAnatGuides();
+  toast(anatGuidesVisible ? 'Guías anatómicas activadas' : 'Guías anatómicas ocultas', 'info');
+}
+
+function resetAnatGuidesForCurrent() {
+  if (currentSlotIdx == null) { toast('Selecciona una foto primero', 'error'); return; }
+  const slot = getSlotByIdx(currentSlotIdx);
+  if (!slot) return;
+  if (!anatGuidesCustom[slot.id]) { toast('Ya están en su posición por defecto', 'info'); return; }
+  delete anatGuidesCustom[slot.id];
+  saveAnatGuidesCustom();
+  updateAnatGuides();
+  toast('Guías restablecidas para ' + slot.name, 'success');
+}
+
 function toggleGuideH() {
   const visible = guideHEl.style.display !== 'none';
   guideHEl.style.display = visible ? 'none' : 'block';
@@ -1238,6 +1761,32 @@ function toggleGuideV() {
   guideVEl.style.display = visible ? 'none' : 'block';
   if (!visible) guideVEl.style.left = (cropBoxEl.offsetWidth / 2) + 'px';
   document.getElementById('btn-guide-v').classList.toggle('active', !visible);
+}
+
+// =====================================================
+// CROP EDITOR ZOOM — enlarges the working image so the user
+// can click landmarks with precision. Changes the max-width /
+// max-height of the <img> (not a CSS transform) so every
+// coordinate calculation continues to work in layout pixels.
+// =====================================================
+let cropZoom = 1;
+const CROP_BASE_MAX_W = 850, CROP_BASE_MAX_H = 540;
+function setCropZoom(v) {
+  cropZoom = Math.max(0.5, Math.min(3, +v));
+  if (cropImgEl) {
+    cropImgEl.style.maxWidth  = (CROP_BASE_MAX_W * cropZoom) + 'px';
+    cropImgEl.style.maxHeight = (CROP_BASE_MAX_H * cropZoom) + 'px';
+  }
+  const label = document.getElementById('crop-zoom-label');
+  if (label) label.textContent = Math.round(cropZoom * 100) + '%';
+  const slider = document.getElementById('crop-zoom-slider');
+  if (slider) slider.value = cropZoom;
+  // Recompute crop-box in the new coord system after the browser has
+  // laid out the enlarged image.
+  if (currentSlotIdx != null) {
+    const slot = getSlotByIdx(currentSlotIdx);
+    if (slot) requestAnimationFrame(() => initCropBox(slot));
+  }
 }
 
 function updateFineRotation() {
@@ -1444,55 +1993,98 @@ function autoJumpToNextInPack(justCroppedSlot) {
 }
 
 function applyColorFilterToCanvas(srcCanvas, slot) {
-  const filter = buildFilter(slot);
-  const needsPixelWork = (slot.gumsPink && slot.gumsPink !== 0) || (slot.teethWhite && slot.teethWhite > 0);
+  // Dental photos have strong specular highlights: bright yellow enamel
+  // reflections and bright red gum highlights. A plain CSS brightness()
+  // is a linear multiplier — it saturates those highlights to pure
+  // white/yellow/red and blows them out. To fix this we split the
+  // pipeline into TWO passes:
+  //   1) CSS filter for contrast / saturation / warmth ONLY (brightness=100)
+  //   2) Pixel-level HUE-PRESERVING GAMMA for brightness ≠ 100:
+  //        - compute gamma-lifted value for the MAX channel of each pixel
+  //        - scale all 3 channels by the SAME ratio → hue is preserved
+  //        - pixels already near 255 barely change (highlights protected)
+  //        - midtones/shadows lift naturally
+  //   3) The existing gumsPink / teethWhite pixel work
+  const b = slot.brightness || 100;
+  const gp = slot.gumsPink || 0;
+  const tw = slot.teethWhite || 0;
+  const needsBrightness = (b !== 100);
+  const needsExtras = (gp !== 0) || (tw > 0);
 
-  // Step 1: Apply CSS filter (brightness, contrast, saturation, warmth)
+  // Pass 1 — CSS filter WITHOUT brightness
+  const filterSlot = { ...slot, brightness: 100 };
+  const filter = buildFilter(filterSlot);
   const out = document.createElement('canvas');
   out.width = srcCanvas.width;
   out.height = srcCanvas.height;
   const ctx = out.getContext('2d');
-  if (filter !== 'none') {
-    ctx.filter = filter;
-  }
+  if (filter !== 'none') ctx.filter = filter;
   ctx.drawImage(srcCanvas, 0, 0);
+  ctx.filter = 'none';
 
-  // Step 2: If gumsPink or teethWhite, do pixel-level color shifts
-  if (needsPixelWork) {
-    const imgData = ctx.getImageData(0, 0, out.width, out.height);
-    const d = imgData.data;
-    const gp = (slot.gumsPink || 0) / 50;    // -1 to +1
-    const tw = (slot.teethWhite || 0) / 80;  // 0 to 1
+  if (!needsBrightness && !needsExtras) return out;
 
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i+1], b = d[i+2];
-      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-      const sat = mx > 0 ? (mx - mn) / mx : 0;
+  // Pass 2 + 3 — single pixel loop for efficiency
+  const imgData = ctx.getImageData(0, 0, out.width, out.height);
+  const d = imgData.data;
 
-      // GUMS (red-dominant pixels): subtle shift toward pink (+) or deeper red (-)
-      if (gp !== 0 && r > 80 && r > g * 1.1 && sat > 0.1) {
-        const redStrength = Math.min(1, Math.max(0, (r - Math.max(g, b)) / 60));
-        if (redStrength > 0.05) {
-          d[i+2] = Math.min(255, Math.max(0, Math.round(b + gp * 20 * redStrength)));
-          d[i+1] = Math.min(255, Math.max(0, Math.round(g + gp * 8 * redStrength)));
-          if (gp < 0) d[i] = Math.min(255, Math.round(r - gp * 5 * redStrength));
-        }
-      }
+  // Gamma LUT for hue-preserving brightness (gamma < 1 lifts; > 1 darkens)
+  let lut = null;
+  if (needsBrightness) {
+    const gamma = 100 / b;
+    lut = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) {
+      lut[i] = Math.round(255 * Math.pow(i / 255, gamma));
+    }
+  }
+  const gpN = gp / 50;    // -1 to +1
+  const twN = tw / 80;    // 0 to 1
 
-      // TEETH (yellow-dominant pixels): gentle whitening
-      if (tw > 0 && r > 100 && g > 80 && r > b * 1.15 && g > b * 0.9) {
-        const yellowness = Math.min(1, Math.max(0, (Math.min(r, g) - b) / 60));
-        if (yellowness > 0.1) {
-          const blend = tw * yellowness;
-          d[i]   = Math.min(255, Math.round(r + (255 - r) * blend * 0.1));
-          d[i+1] = Math.min(255, Math.round(g + (255 - g) * blend * 0.1));
-          d[i+2] = Math.min(255, Math.round(b + (255 - b) * blend * 0.18));
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i + 1], bl = d[i + 2];
+
+    // ---- Hue-preserving brightness ----
+    if (lut) {
+      const mx = Math.max(r, g, bl);
+      if (mx > 0) {
+        const newMx = lut[mx];
+        if (newMx !== mx) {
+          const ratio = newMx / mx;
+          r = Math.min(255, Math.round(r * ratio));
+          g = Math.min(255, Math.round(g * ratio));
+          bl = Math.min(255, Math.round(bl * ratio));
         }
       }
     }
-    ctx.putImageData(imgData, 0, 0);
-  }
 
+    // ---- Gums (red-dominant): subtle shift toward pink (+) or deeper red (-) ----
+    if (gpN !== 0) {
+      const mx2 = Math.max(r, g, bl), mn2 = Math.min(r, g, bl);
+      const sat = mx2 > 0 ? (mx2 - mn2) / mx2 : 0;
+      if (r > 80 && r > g * 1.1 && sat > 0.1) {
+        const redStrength = Math.min(1, Math.max(0, (r - Math.max(g, bl)) / 60));
+        if (redStrength > 0.05) {
+          bl = Math.min(255, Math.max(0, Math.round(bl + gpN * 20 * redStrength)));
+          g  = Math.min(255, Math.max(0, Math.round(g  + gpN * 8  * redStrength)));
+          if (gpN < 0) r = Math.min(255, Math.round(r - gpN * 5 * redStrength));
+        }
+      }
+    }
+
+    // ---- Teeth (yellow-dominant): gentle whitening ----
+    if (twN > 0 && r > 100 && g > 80 && r > bl * 1.15 && g > bl * 0.9) {
+      const yellowness = Math.min(1, Math.max(0, (Math.min(r, g) - bl) / 60));
+      if (yellowness > 0.1) {
+        const blend = twN * yellowness;
+        r  = Math.min(255, Math.round(r  + (255 - r)  * blend * 0.10));
+        g  = Math.min(255, Math.round(g  + (255 - g)  * blend * 0.10));
+        bl = Math.min(255, Math.round(bl + (255 - bl) * blend * 0.18));
+      }
+    }
+
+    d[i] = r; d[i + 1] = g; d[i + 2] = bl;
+  }
+  ctx.putImageData(imgData, 0, 0);
   return out;
 }
 
