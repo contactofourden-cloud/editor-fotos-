@@ -2931,10 +2931,11 @@ function drawMosaic() {
   const AREA_Y = HEADER_H + PAD;
   const BOTTOM_RESERVE = 40;
   const AREA_H = A4_H - AREA_Y - BOTTOM_RESERVE;
-  // Fila 3 con peso 0.95 (como el mosaico antiguo que gustaba) — así queda
-  // más grande que la fila 4 de caninos. La cap del paso siguiente evita
-  // que la redistribución del espacio libre la infle todavía más.
-  const weights = [1.10, 0.75, 0.95, 0.75, 0.50];
+  // Pesos ajustados para restaurar la jerarquía del mosaico antiguo:
+  // oclusales dominantes en la parte central, caninos claramente más
+  // pequeños. El cap de la fila 3 sigue vigente → no se amplifica por
+  // redistribución. Los caninos siguen a 1:1 (cuadrado).
+  const weights = [1.10, 0.75, 1.05, 0.65, 0.55];
   const totalW = weights.reduce((a, b) => a + b, 0);
   const usableH = AREA_H - PAD * 4;
   const targetHeights = weights.map(w => usableH * (w / totalW));
