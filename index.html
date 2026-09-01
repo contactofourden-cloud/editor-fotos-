@@ -256,7 +256,7 @@
       <input type="file" id="logo-input" accept="image/png,image/jpeg" onchange="loadLogo(this)">
     </div>
 
-    <div class="panel-section" id="crop-color-panel">
+    <div class="panel-section" id="crop-color-panel" style="display:none">
       <div class="panel-title">Color foto actual</div>
       <div class="color-controls">
         <div class="slider-row"><label>Brillo</label><input type="range" id="s-brightness" min="50" max="200" step="0.5" value="100" oninput="updateSliderVal('brightness'); livePreview()"><span id="v-brightness">100</span></div>
@@ -2875,7 +2875,7 @@ function switchView(view) {
   document.getElementById('btn-step-color').classList.toggle('active', view === 'color');
   document.getElementById('btn-step-mosaic').classList.toggle('active', view === 'mosaic');
   document.getElementById('crop-toolbar').style.display = (view === 'crop') ? 'flex' : 'none';
-  document.getElementById('crop-color-panel').style.display = (view === 'crop') ? 'block' : 'none';
+  document.getElementById('crop-color-panel').style.display = 'none'; // panel de color lateral en recorte: oculto (no afectaba a la foto y confundía)
   if (view === 'color') {
     renderColorTabs();
     renderColorGrid();
@@ -3326,7 +3326,10 @@ function openBrushTool(slotId) {
   brushHistory = [];
   brushMaskFloat = null;
   const bc = document.getElementById('brush-canvas');
-  const src = slot.croppedCanvasOriginal;
+  // Cargar la versión CON color aplicado (croppedCanvas) — antes cargaba
+  // croppedCanvasOriginal, así que el pincel se abría sin brillo/contraste
+  // y no coincidía con lo que ve el usuario en la card.
+  const src = slot.croppedCanvas || slot.croppedCanvasOriginal;
   bc.width = src.width; bc.height = src.height;
   bc.getContext('2d').drawImage(src, 0, 0);
   brushHistory.push(bc.getContext('2d').getImageData(0, 0, bc.width, bc.height));
@@ -3460,10 +3463,16 @@ function brushApply() {
   const out = document.createElement('canvas');
   out.width = bc.width; out.height = bc.height;
   out.getContext('2d').drawImage(bc, 0, 0);
+  // Como abrimos el pincel sobre croppedCanvas (color ya bakeado), al
+  // guardar el resultado ya lleva incluidas las correcciones anteriores.
+  // Reseteamos los valores de slider para no doblar el efecto.
   slot.croppedCanvasOriginal = out;
+  slot.brightness = 100; slot.contrast = 100; slot.saturation = 100;
+  slot.warmth = 0; slot.gumsPink = 0; slot.teethWhite = 0;
   slot.croppedCanvas = applyColorFilterToCanvas(out, slot);
-  invalidateThumb(slot); slot._colorImgUrl = null;
+  invalidateThumb(slot); slot._colorImgUrl = null; slot._previewSrc = null;
   renderPhotoList(); updateCroppedList(); renderColorGrid();
+  updateSlidersFromSelection();
   brushCancel();
   toast('\u{1f58c} Aclarado aplicado', 'success');
 }
