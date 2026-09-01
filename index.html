@@ -259,9 +259,9 @@
     <div class="panel-section" id="crop-color-panel">
       <div class="panel-title">Color foto actual</div>
       <div class="color-controls">
-        <div class="slider-row"><label>Brillo</label><input type="range" id="s-brightness" min="50" max="150" value="100" oninput="updateSliderVal('brightness'); livePreview()"><span id="v-brightness">100</span></div>
-        <div class="slider-row"><label>Contraste</label><input type="range" id="s-contrast" min="50" max="150" value="100" oninput="updateSliderVal('contrast'); livePreview()"><span id="v-contrast">100</span></div>
-        <div class="slider-row"><label>Saturac.</label><input type="range" id="s-saturation" min="50" max="150" value="100" oninput="updateSliderVal('saturation'); livePreview()"><span id="v-saturation">100</span></div>
+        <div class="slider-row"><label>Brillo</label><input type="range" id="s-brightness" min="50" max="200" step="0.5" value="100" oninput="updateSliderVal('brightness'); livePreview()"><span id="v-brightness">100</span></div>
+        <div class="slider-row"><label>Contraste</label><input type="range" id="s-contrast" min="50" max="200" step="0.5" value="100" oninput="updateSliderVal('contrast'); livePreview()"><span id="v-contrast">100</span></div>
+        <div class="slider-row"><label>Saturac.</label><input type="range" id="s-saturation" min="50" max="200" step="0.5" value="100" oninput="updateSliderVal('saturation'); livePreview()"><span id="v-saturation">100</span></div>
         <div class="slider-row"><label>Temp.</label><input type="range" id="s-warmth" min="-30" max="30" value="0" oninput="updateSliderVal('warmth'); livePreview()"><span id="v-warmth">0</span></div>
         <button class="apply-color-btn" onclick="applyColorToSelected()">Aplicar a esta</button>
         <button class="apply-color-btn" style="background: linear-gradient(135deg, #3ecf8e, #10b981); color: #fff; margin-top: 4px;" onclick="autoImproveCurrentPhoto()">✨ Auto-mejora esta foto</button>
@@ -392,15 +392,15 @@
         <div class="color-sliders-row">
           <div class="color-slider-group">
             <label>Brillo <span id="cv-brightness">—</span></label>
-            <input type="range" id="cs-brightness" min="50" max="150" value="100" oninput="onColorSlider('brightness')" disabled>
+            <input type="range" id="cs-brightness" min="50" max="200" step="0.5" value="100" oninput="onColorSlider('brightness')" disabled>
           </div>
           <div class="color-slider-group">
             <label>Contraste <span id="cv-contrast">—</span></label>
-            <input type="range" id="cs-contrast" min="50" max="150" value="100" oninput="onColorSlider('contrast')" disabled>
+            <input type="range" id="cs-contrast" min="50" max="200" step="0.5" value="100" oninput="onColorSlider('contrast')" disabled>
           </div>
           <div class="color-slider-group">
             <label>Saturación <span id="cv-saturation">—</span></label>
-            <input type="range" id="cs-saturation" min="50" max="150" value="100" oninput="onColorSlider('saturation')" disabled>
+            <input type="range" id="cs-saturation" min="50" max="200" step="0.5" value="100" oninput="onColorSlider('saturation')" disabled>
           </div>
           <div class="color-slider-group">
             <label>Temperatura <span id="cv-warmth">—</span></label>
@@ -2059,6 +2059,7 @@ function applyColorFilterToCanvas(srcCanvas, slot) {
   const d = imgData.data;
 
   // Gamma LUT for hue-preserving brightness (gamma < 1 lifts; > 1 darkens)
+  // Fórmula clásica original — protege reflejos y respeta colores oscuros.
   let lut = null;
   if (needsBrightness) {
     const gamma = 100 / b;
@@ -2357,17 +2358,28 @@ function buildColorCard(slot) {
   imgWrap.className = 'color-card-img-wrap';
   const img = document.createElement('img');
   img.className = 'color-card-img';
-  // If pixel-based effects (gumsPink/teethWhite) are active, show the fully processed canvas
-  const hasPixelEffects = (slot.gumsPink && slot.gumsPink !== 0) || (slot.teethWhite && slot.teethWhite > 0);
-  if (hasPixelEffects && slot.croppedCanvas) {
-    img.src = slot.croppedCanvas.toDataURL('image/jpeg', .78);
-    img.style.filter = 'none'; // Already baked in
+  // Si hay CUALQUIER color no-default, usar el croppedCanvas full-res (que
+  // ya tiene la gamma real bakeada, misma que el mosaico). Antes usábamos
+  // el original + CSS filter para brillo/contraste/etc, pero el CSS filter
+  // aproxima mal la gamma y quema highlights → discrepancia con el mosaico
+  // al volver de la vista Mosaico a la vista Color.
+  const hasAnyColor = (
+    (slot.brightness && slot.brightness !== 100) ||
+    (slot.contrast && slot.contrast !== 100) ||
+    (slot.saturation && slot.saturation !== 100) ||
+    (slot.warmth && slot.warmth !== 0) ||
+    (slot.gumsPink && slot.gumsPink !== 0) ||
+    (slot.teethWhite && slot.teethWhite > 0)
+  );
+  if (hasAnyColor && slot.croppedCanvas) {
+    img.src = slot.croppedCanvas.toDataURL('image/jpeg', .85);
+    img.style.filter = 'none';
   } else {
     if (!slot._colorImgUrl) {
       slot._colorImgUrl = slot.croppedCanvasOriginal.toDataURL('image/jpeg', .78);
     }
     img.src = slot._colorImgUrl;
-    img.style.filter = buildFilter(slot);
+    img.style.filter = 'none';
   }
   imgWrap.appendChild(img);
 
@@ -2617,7 +2629,9 @@ function getPreviewSrc(slot) {
   if (slot._previewSrc) return slot._previewSrc;
   const src = slot.croppedCanvasOriginal;
   if (!src) return null;
-  const maxDim = 400;
+  // 800 px máximo — mucho menos pixelado que los 400 px anteriores y sigue
+  // rápido (~5-10 ms por render en cada frame de arrastre).
+  const maxDim = 800;
   const sc = Math.min(1, maxDim / Math.max(src.width, src.height));
   const c = document.createElement('canvas');
   c.width  = Math.max(1, Math.round(src.width * sc));
@@ -2633,7 +2647,8 @@ function renderPixelPreview(slot) {
   const previewOut = applyColorFilterToCanvas(src, slot);
   const card = document.querySelector('.color-card[data-slot-id="' + slot.id + '"] .color-card-img');
   if (card) {
-    card.src = previewOut.toDataURL('image/jpeg', .55);
+    // JPEG 0.85 → sin artefactos visibles a tamaño de card
+    card.src = previewOut.toDataURL('image/jpeg', .85);
     card.style.filter = 'none';
   }
 }
@@ -2649,25 +2664,22 @@ function onColorSlider(key) {
     if (slot) { slot[key] = v; slot._dirty = true; }
   });
 
-  const isPixelBased = (key === 'gumsPink' || key === 'teethWhite');
-  if (isPixelBased) {
-    if (pixelSliderRAF) return; // one preview per frame
-    pixelSliderRAF = requestAnimationFrame(() => {
-      pixelSliderRAF = null;
-      colorSelectedIds.forEach(id => {
-        const slot = slots.find(s => s.id === id);
-        if (slot) renderPixelPreview(slot);
-      });
+  // UNIFICADO: TODOS los sliders usan pixel preview (400 px) con la misma
+  // S-curve del mosaico → lo que ves en la card es EXACTAMENTE lo que
+  // sale en el mosaico final. Sin CSS filter que queme highlights.
+  if (pixelSliderRAF) return; // one preview per frame
+  pixelSliderRAF = requestAnimationFrame(() => {
+    pixelSliderRAF = null;
+    colorSelectedIds.forEach(id => {
+      const slot = slots.find(s => s.id === id);
+      if (slot) {
+        renderPixelPreview(slot);
+        // Actualiza también el pequeño texto de valores debajo de la card
+        const vals = document.querySelector('.color-card[data-slot-id="' + slot.id + '"] .color-card-vals');
+        if (vals) vals.textContent = `B${slot.brightness} C${slot.contrast} S${slot.saturation} T${slot.warmth}`;
+      }
     });
-  } else {
-    if (colorSliderRAF) cancelAnimationFrame(colorSliderRAF);
-    colorSliderRAF = requestAnimationFrame(() => {
-      colorSelectedIds.forEach(id => {
-        const slot = slots.find(s => s.id === id);
-        if (slot) updateSingleCardVisual(slot);
-      });
-    });
-  }
+  });
 }
 
 // When user releases a slider, actually re-render the cropped canvas
