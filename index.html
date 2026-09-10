@@ -414,6 +414,10 @@
             <label>Dientes <span id="cv-teethWhite" style="color:#f7c948">—</span></label>
             <input type="range" id="cs-teethWhite" min="0" max="80" value="0" oninput="onColorSlider('teethWhite')" disabled style="accent-color:#f7c948">
           </div>
+          <div class="color-slider-group">
+            <label>Brillo bruto <span id="cv-brightnessRaw" style="color:#ffb04a">—</span></label>
+            <input type="range" id="cs-brightnessRaw" min="50" max="200" step="0.5" value="100" oninput="onColorSlider('brightnessRaw')" disabled style="accent-color:#ffb04a">
+          </div>
         </div>
         <div class="color-actions-row">
           <button class="crop-action-btn" onclick="resetSelectedColors()">⟲ Reset color de seleccionadas</button>
@@ -572,6 +576,7 @@ let slots = SET_SLOTS.map(s => ({
   rotation: 0, fineRotation: 0, flipH: false, flipV: false,
   brightness: 100, contrast: 100, saturation: 100, warmth: 0,
   gumsPink: 0, teethWhite: 0,
+  brightnessRaw: 100,        // Multiplicador lineal final (permite quemar)
   cropBoxData: null,         // Normalized crop box: {normX, normY, normW, normH}
   isColorRef: false,
   colorStats: null
@@ -832,6 +837,7 @@ function createExtraSlot(name, icon) {
     imgSrc: null, imgEl: null, croppedCanvas: null, croppedCanvasOriginal: null, thumbDataUrl: null,
     rotation: 0, fineRotation: 0, flipH: false, flipV: false,
     brightness: 100, contrast: 100, saturation: 100, warmth: 0,
+    brightnessRaw: 100,
     cropBoxData: null, isColorRef: false, colorStats: null,
     // Fotos extra: recorte libre desde el inicio — el usuario decide el ratio.
     _freeRatio: true
@@ -2036,9 +2042,11 @@ function applyColorFilterToCanvas(srcCanvas, slot) {
   //        - midtones/shadows lift naturally
   //   3) The existing gumsPink / teethWhite pixel work
   const b = slot.brightness || 100;
+  const bR = slot.brightnessRaw || 100;
   const gp = slot.gumsPink || 0;
   const tw = slot.teethWhite || 0;
   const needsBrightness = (b !== 100);
+  const needsRaw = (bR !== 100);
   const needsExtras = (gp !== 0) || (tw > 0);
 
   // Pass 1 — CSS filter WITHOUT brightness
@@ -2052,7 +2060,7 @@ function applyColorFilterToCanvas(srcCanvas, slot) {
   ctx.drawImage(srcCanvas, 0, 0);
   ctx.filter = 'none';
 
-  if (!needsBrightness && !needsExtras) return out;
+  if (!needsBrightness && !needsExtras && !needsRaw) return out;
 
   // Pass 2 + 3 — single pixel loop for efficiency
   const imgData = ctx.getImageData(0, 0, out.width, out.height);
@@ -2111,6 +2119,16 @@ function applyColorFilterToCanvas(srcCanvas, slot) {
         g  = Math.min(255, Math.round(g  + (255 - g)  * blend * 0.10));
         bl = Math.min(255, Math.round(bl + (255 - bl) * blend * 0.18));
       }
+    }
+
+    // ---- Brillo bruto: multiplicador lineal FINAL. Permite quemar
+    //      (los valores > 255 se clipan). Es el complemento "sin filtro"
+    //      del brillo gamma protegido de arriba.
+    if (needsRaw) {
+      const f = bR / 100;
+      r  = Math.min(255, Math.max(0, Math.round(r  * f)));
+      g  = Math.min(255, Math.max(0, Math.round(g  * f)));
+      bl = Math.min(255, Math.max(0, Math.round(bl * f)));
     }
 
     d[i] = r; d[i + 1] = g; d[i + 2] = bl;
@@ -2369,7 +2387,8 @@ function buildColorCard(slot) {
     (slot.saturation && slot.saturation !== 100) ||
     (slot.warmth && slot.warmth !== 0) ||
     (slot.gumsPink && slot.gumsPink !== 0) ||
-    (slot.teethWhite && slot.teethWhite > 0)
+    (slot.teethWhite && slot.teethWhite > 0) ||
+    (slot.brightnessRaw && slot.brightnessRaw !== 100)
   );
   if (hasAnyColor && slot.croppedCanvas) {
     img.src = slot.croppedCanvas.toDataURL('image/jpeg', .85);
@@ -2443,6 +2462,7 @@ function buildColorCard(slot) {
     e.stopPropagation();
     slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
     slot.gumsPink = 0; slot.teethWhite = 0;
+    slot.brightnessRaw = 100;
     // Invalidamos ambos caches — sin esto la card seguiría mostrando el
     // dataURL bakeado con encías/dientes anteriores.
     slot._previewSrc = null;
@@ -2507,7 +2527,7 @@ function toggleColorSelection(id) {
 }
 
 function updateSlidersFromSelection() {
-  const ids = ['brightness', 'contrast', 'saturation', 'warmth', 'gumsPink', 'teethWhite'];
+  const ids = ['brightness', 'contrast', 'saturation', 'warmth', 'gumsPink', 'teethWhite', 'brightnessRaw'];
   const sliders = ids.map(k => document.getElementById('cs-' + k));
   const labels = ids.map(k => document.getElementById('cv-' + k));
 
@@ -2527,18 +2547,20 @@ function updateSlidersFromSelection() {
     document.getElementById('cs-warmth').value = s.warmth;
     document.getElementById('cs-gumsPink').value = s.gumsPink || 0;
     document.getElementById('cs-teethWhite').value = s.teethWhite || 0;
+    document.getElementById('cs-brightnessRaw').value = s.brightnessRaw || 100;
     document.getElementById('cv-brightness').textContent = s.brightness;
     document.getElementById('cv-contrast').textContent = s.contrast;
     document.getElementById('cv-saturation').textContent = s.saturation;
     document.getElementById('cv-warmth').textContent = s.warmth;
     document.getElementById('cv-gumsPink').textContent = s.gumsPink || 0;
     document.getElementById('cv-teethWhite').textContent = s.teethWhite || 0;
+    document.getElementById('cv-brightnessRaw').textContent = s.brightnessRaw || 100;
   } else {
     ids.forEach(k => {
-      const same = arr.every(s => s[k] === arr[0][k]);
-      const avg = Math.round(arr.reduce((a, s) => a + s[k], 0) / arr.length);
+      const same = arr.every(s => (s[k] || (k === 'brightnessRaw' ? 100 : 0)) === (arr[0][k] || (k === 'brightnessRaw' ? 100 : 0)));
+      const avg = Math.round(arr.reduce((a, s) => a + (s[k] || (k === 'brightnessRaw' ? 100 : 0)), 0) / arr.length);
       document.getElementById('cs-' + k).value = avg;
-      document.getElementById('cv-' + k).textContent = same ? arr[0][k] : (avg + ' (~)');
+      document.getElementById('cv-' + k).textContent = same ? (arr[0][k] || (k === 'brightnessRaw' ? 100 : 0)) : (avg + ' (~)');
     });
   }
 }
@@ -2689,7 +2711,7 @@ function onColorSlider(key) {
 // de color nunca se enganchasen a slot.croppedCanvas y por tanto el
 // mosaico se quedase con el color viejo.
 function _registerColorChangeHandlers() {
-  ['cs-brightness', 'cs-contrast', 'cs-saturation', 'cs-warmth', 'cs-gumsPink', 'cs-teethWhite'].forEach(id => {
+  ['cs-brightness', 'cs-contrast', 'cs-saturation', 'cs-warmth', 'cs-gumsPink', 'cs-teethWhite', 'cs-brightnessRaw'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || el._changeBound) return;
     el._changeBound = true;
@@ -2717,6 +2739,7 @@ function resetSelectedColors() {
     if (!slot) return;
     slot.brightness = 100; slot.contrast = 100; slot.saturation = 100; slot.warmth = 0;
     slot.gumsPink = 0; slot.teethWhite = 0;
+    slot.brightnessRaw = 100;
     // Invalidamos TODOS los caches de preview para que la card vuelva a
     // pintarse desde el croppedCanvasOriginal (sin efectos pixel-based).
     slot._previewSrc = null;
@@ -3542,6 +3565,8 @@ async function saveSessionFile() {
       rotation: s.rotation, fineRotation: s.fineRotation,
       flipH: s.flipH, flipV: s.flipV,
       brightness: s.brightness, contrast: s.contrast, saturation: s.saturation, warmth: s.warmth,
+      brightnessRaw: s.brightnessRaw || 100,
+      gumsPink: s.gumsPink || 0, teethWhite: s.teethWhite || 0,
       isColorRef: s.isColorRef,
       imgSrc: null, croppedDataUrl: null
     };
@@ -3608,7 +3633,7 @@ async function loadSessionFile(input) {
         s.thumbDataUrl = null; s._colorImgUrl = null;
         s.cropBoxData = null;
         s.rotation = 0; s.fineRotation = 0; s.flipH = false; s.flipV = false;
-        s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0;
+        s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0; s.brightnessRaw = 100;
         s.isColorRef = false; s.colorStats = null;
       });
 
@@ -3635,6 +3660,9 @@ async function loadSessionFile(input) {
         slot.contrast = sd.contrast || 100;
         slot.saturation = sd.saturation || 100;
         slot.warmth = sd.warmth || 0;
+        slot.brightnessRaw = sd.brightnessRaw || 100;
+        slot.gumsPink = sd.gumsPink || 0;
+        slot.teethWhite = sd.teethWhite || 0;
         slot.isColorRef = sd.isColorRef || false;
         slot.thumbDataUrl = null;
         slot._colorImgUrl = null;
@@ -3698,7 +3726,7 @@ function newSession() {
     s.thumbDataUrl = null; s._colorImgUrl = null;
     s.cropBoxData = null;
     s.rotation = 0; s.fineRotation = 0; s.flipH = false; s.flipV = false;
-    s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0;
+    s.brightness = 100; s.contrast = 100; s.saturation = 100; s.warmth = 0; s.brightnessRaw = 100;
     s.isColorRef = false; s.colorStats = null;
   });
   renderPhotoList(); updateCroppedList();
