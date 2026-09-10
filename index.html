@@ -1376,41 +1376,59 @@ function _calibFinish() {
   const T_HAIR = _looseFrame ? 0.12 : 0.07;
   const T_CHIN = _looseFrame ? 0.80 : 0.88;
 
-  // Crop height from hair→chin span
-  const range = Math.max(0.02, chin.y - hair.y);
-  const cropH_norm = range / (T_CHIN - T_HAIR);
-  const cropW_norm = cropH_norm * ratio * (s.img.naturalHeight / s.img.naturalWidth);
+  // Crop height from hair→chin span. Todo en "unidades de imagen" — es decir,
+  // fracciones del ancho/alto NATURAL de la foto (no del renderizado del DOM).
+  //   cropH_img = altura del recorte / altura natural
+  //   cropW_img = ancho    del recorte / ancho    natural
+  // Con esta convención el aspecto del recorte en píxeles reales es:
+  //   (cropW_img * naturalW) / (cropH_img * naturalH) = ratio  →
+  //   cropW_img / cropH_img = ratio * (naturalH / naturalW)
+  const natW = s.img.naturalWidth, natH = s.img.naturalHeight;
+  const range = Math.max(0.02, chin.y - hair.y);   // fracción de alto NATURAL (los puntos ya vienen en ese espacio)
+  let cropH_img = range / (T_CHIN - T_HAIR);
+  let cropW_img = cropH_img * ratio * (natH / natW);
+
+  // Si el recorte pedido no cabe entero en la imagen (típico en retratos
+  // donde pelo→mentón ocupa >75 % del alto → cropW_img > 1), lo ENCOGEMOS
+  // proporcionalmente para que quepa MANTENIENDO EL RATIO. Antes hacíamos
+  // clamp por eje, que dejaba nw*imgW / nh*imgH ≠ ratio; después fitToRatio
+  // recortaba UNO de los dos lados en el editor → el mosaico dibujaba una
+  // versión más ampliada que la que veía el usuario. Este shrink evita todo.
+  const shrink = Math.min(1, 1 / Math.max(cropW_img, cropH_img));
+  cropH_img *= shrink;
+  cropW_img *= shrink;
 
   // Crop TOP so pelo cae en T_HAIR
-  const cropTop_norm = hair.y - T_HAIR * cropH_norm;
+  const cropTop_img = hair.y - T_HAIR * cropH_img;
 
   // Crop LEFT:
   //   frontal → centrar sobre la media horizontal de los 3 puntos
   //   perfil / semiperfil → nariz al 70 % (o 30 %) del ancho del recorte,
   //                         según hacia dónde mire la cara
-  let cropLeft_norm;
+  let cropLeft_img;
   if (!s.isProfile) {
     const midX = (hair.x + nose.x + chin.x) / 3;
-    cropLeft_norm = midX - cropW_norm / 2;
+    cropLeft_img = midX - cropW_img / 2;
   } else if (_usesEarLandmark(slot.id)) {
     // 'nose' aquí guarda la posición de la OREJA (trago) porque para estos
     // slots (perfil_der, perfil_sonrisa) el paso 2 pide oreja en vez de nariz.
     // Al centrarla al 50 % del ancho del crop, la cabeza queda repartida por
     // igual entre nuca y frente y el óvalo no se adelanta.
-    cropLeft_norm = nose.x - 0.50 * cropW_norm;
+    cropLeft_img = nose.x - 0.50 * cropW_img;
   } else {
     const rightFacing = nose.x > hair.x;   // nariz por delante del pelo
     // Nariz cerca del borde delantero del recorte (80 % / 20 %) → la cara
     // ocupa el ancho completo y coincide con la silueta centrada.
     const noseTargetX = rightFacing ? 0.80 : 0.20;
-    cropLeft_norm = nose.x - noseTargetX * cropW_norm;
+    cropLeft_img = nose.x - noseTargetX * cropW_img;
   }
 
-  // Clamp inside the image
-  let nx = Math.max(0, Math.min(1 - cropW_norm, cropLeft_norm));
-  let ny = Math.max(0, Math.min(1 - cropH_norm, cropTop_norm));
-  let nw = Math.min(cropW_norm, 1 - nx);
-  let nh = Math.min(cropH_norm, 1 - ny);
+  // Clamp: como cropW_img/cropH_img ≤ 1 (por el shrink) podemos deslizar
+  // sin cambiar el TAMAÑO — solo la POSICIÓN. Así el aspecto se preserva.
+  const nx = Math.max(0, Math.min(1 - cropW_img, cropLeft_img));
+  const ny = Math.max(0, Math.min(1 - cropH_img, cropTop_img));
+  const nw = cropW_img;
+  const nh = cropH_img;
 
   slot.cropBoxData = { normX: nx, normY: ny, normW: nw, normH: nh };
   _calibCleanup();
@@ -2998,13 +3016,15 @@ function computeSlotLuminance(slot) {
 // Sin chequeo global — comparar caras (más brillantes) con intraorales
 // (más oscuras) producía siempre falsos positivos en las intraorales.
 const _BRIGHTNESS_ROWS = [
+  // Cara mantiene 15 % (los cambios en piel se ven más a ojo). El resto bajado
+  // a márgenes menores para detectar diferencias más finas en intraorales.
   { name: 'Cara',              margin: 0.15, ids: ['frontal_reposo', 'frontal_sonrisa', 'perfil_der', 'semiperfil'] },
-  { name: 'Intraorales fila 2',margin: 0.10, ids: ['lateral_der_ocl', 'frontal_ocl', 'lateral_izq_ocl'] },
-  { name: 'Oclusales',         margin: 0.07, ids: ['oclusal_sup', 'oclusal_inf'] },
-  { name: 'Fila 4 caninos',    margin: 0.10, ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
-  { name: 'Labios',            margin: 0.10, ids: ['labios_reposo', 'labios_sonrisa'] },
-  { name: 'Par laterales',     margin: 0.10, ids: ['lateral_der_ocl', 'lateral_izq_ocl'] },
-  { name: 'Par caninos',       margin: 0.10, ids: ['canino_der', 'canino_izq'] },
+  { name: 'Intraorales fila 2',margin: 0.07, ids: ['lateral_der_ocl', 'frontal_ocl', 'lateral_izq_ocl'] },
+  { name: 'Oclusales',         margin: 0.05, ids: ['oclusal_sup', 'oclusal_inf'] },
+  { name: 'Fila 4 caninos',    margin: 0.07, ids: ['canino_der', 'frontal_abierta', 'canino_izq'] },
+  { name: 'Labios',            margin: 0.07, ids: ['labios_reposo', 'labios_sonrisa'] },
+  { name: 'Par laterales',     margin: 0.07, ids: ['lateral_der_ocl', 'lateral_izq_ocl'] },
+  { name: 'Par caninos',       margin: 0.07, ids: ['canino_der', 'canino_izq'] },
 ];
 // Referencia especial para oclusales: al ser ópticamente más oscuras
 // (espejo + paladar/lengua), no basta compararlas entre sí (si ambas están
