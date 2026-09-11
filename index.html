@@ -3401,6 +3401,113 @@ async function generateAndDownloadMosaic() {
   await new Promise(r => setTimeout(r, 120));
   downloadMosaic();
 }
+// Genera una copia del mosaico aclarada para imprimir. Usa gamma hue-preserving
+// sobre el canal MAX de cada pixel — sube sombras y medios, deja los reflejos
+// prácticamente intactos. Escala de tonos usada:
+//   +1 ≈ gamma 0.82  (mínimo, si la impresora casi acierta)
+//   +2 ≈ gamma 0.72  (recomendado para láser/tinta con papel mate)
+//   +3 ≈ gamma 0.62  (fuerte, para impresoras que oscurecen mucho)
+function makePrintFriendlyCopy(srcCanvas, gamma) {
+  const out = document.createElement('canvas');
+  out.width = srcCanvas.width;
+  out.height = srcCanvas.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(srcCanvas, 0, 0);
+  const img = ctx.getImageData(0, 0, out.width, out.height);
+  const d = img.data;
+  const lut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) lut[i] = Math.round(255 * Math.pow(i / 255, gamma));
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const mx = Math.max(r, g, b);
+    if (mx === 0) continue;
+    const newMx = lut[mx];
+    if (newMx === mx) continue;
+    const k = newMx / mx;
+    d[i]     = Math.min(255, Math.round(r * k));
+    d[i + 1] = Math.min(255, Math.round(g * k));
+    d[i + 2] = Math.min(255, Math.round(b * k));
+  }
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
+
+// Inyecta un marker EXIF APP1 con ColorSpace=sRGB (tag 0xA001 = 1) justo
+// después del SOI de un JPEG. Muchas impresoras y drivers usan este tag
+// como hint de espacio de color — sin él, algunas asumen AdobeRGB o CMYK
+// interno y satura. Canvas.toDataURL YA emite sRGB, pero no siempre lo
+// declara explícitamente en la cabecera.
+//
+// Estructura del bloque insertado (54 bytes):
+//   FF E1 00 34         → APP1 marker + length
+//   Exif\0\0            → EXIF signature
+//   II * 00             → TIFF header (little-endian)
+//   08 00 00 00         → IFD0 offset
+//   01 00               → 1 entrada en IFD0
+//   69 87  04 00  01 00 00 00  1A 00 00 00 → ExifIFD pointer @ offset 26
+//   00 00 00 00         → no next IFD
+//   01 00               → 1 entrada en ExifIFD
+//   01 A0  03 00  01 00 00 00  01 00 00 00 → ColorSpace SHORT = 1 (sRGB)
+//   00 00 00 00         → no next IFD
+const _SRGB_EXIF_APP1 = new Uint8Array([
+  0xFF, 0xE1, 0x00, 0x34,
+  0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+  0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00,
+  0x01, 0x00,
+  0x69, 0x87, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x1A, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+  0x01, 0x00,
+  0x01, 0xA0, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+]);
+
+// Convierte data URL a Uint8Array (bytes crudos del JPEG).
+function _dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(',')[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+function _bytesToBase64(bytes) {
+  let s = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(s);
+}
+
+// Toma un JPEG (bytes) y le inyecta el marker EXIF sRGB entre el SOI y
+// cualquier marker existente. Si ya hay APP1, se salta la inyección.
+function injectSRGBTag(jpegBytes) {
+  // JPEG debe empezar por FF D8 (SOI)
+  if (jpegBytes[0] !== 0xFF || jpegBytes[1] !== 0xD8) return jpegBytes;
+  // Detectar si ya hay APP1 (evitar duplicados)
+  let pos = 2;
+  while (pos < jpegBytes.length - 1 && jpegBytes[pos] === 0xFF) {
+    const marker = jpegBytes[pos + 1];
+    if (marker === 0xE1) return jpegBytes; // ya tiene APP1
+    if (marker === 0xDA || marker === 0xD9) break; // SOS o EOI → paramos
+    const len = (jpegBytes[pos + 2] << 8) | jpegBytes[pos + 3];
+    pos += 2 + len;
+  }
+  // Insertar APP1 justo después de SOI
+  const out = new Uint8Array(jpegBytes.length + _SRGB_EXIF_APP1.length);
+  out.set(jpegBytes.subarray(0, 2), 0);
+  out.set(_SRGB_EXIF_APP1, 2);
+  out.set(jpegBytes.subarray(2), 2 + _SRGB_EXIF_APP1.length);
+  return out;
+}
+
+// Canvas → JPEG base64 con tag sRGB embebido.
+function canvasToTaggedJpegBase64(canvas, quality) {
+  const url = canvas.toDataURL('image/jpeg', quality);
+  const bytes = _dataUrlToBytes(url);
+  const tagged = injectSRGBTag(bytes);
+  return _bytesToBase64(tagged);
+}
+
 async function downloadAllCropped() {
   const all = getAllSlots().filter(s => s.croppedCanvas);
   if (!all.length) { toast('No hay fotos recortadas', 'error'); return; }
@@ -3453,8 +3560,34 @@ async function downloadAllCropped() {
   if (mosaicCanvas && mosaicCanvas.width > 100) {
     // Generate mosaic fresh at full resolution before saving
     drawMosaic();
-    const mosaicUrl = mosaicCanvas.toDataURL('image/jpeg', .97);
-    folder.file(`MOSAICO_${name}_${date}.jpg`, mosaicUrl.split(',')[1], { base64: true });
+    // Versión de pantalla — tal cual se ve en la app (sin lift).
+    folder.file(
+      `MOSAICO_${name}_${date}_PANTALLA.jpg`,
+      canvasToTaggedJpegBase64(mosaicCanvas, .97),
+      { base64: true }
+    );
+
+    // 3 versiones PARA IMPRIMIR con lift creciente (gamma hue-preserving).
+    // Impresoras láser y tinta con papel mate suelen oscurecer/saturar
+    // respecto a la pantalla. Estas 3 copias cubren el rango habitual:
+    //   +1 tono → impresora que casi acierta (offset suave)
+    //   +2 tonos → láser/tinta estándar (recomendado por defecto)
+    //   +3 tonos → impresoras que oscurecen mucho o papel muy absorbente
+    // Todas incluyen tag EXIF sRGB para que el driver de impresora no
+    // asuma otro perfil (CMYK interno o AdobeRGB) y sature aún más.
+    const printSteps = [
+      { label: '+1_TONO',   gamma: 0.82 },
+      { label: '+2_TONOS',  gamma: 0.72 },
+      { label: '+3_TONOS',  gamma: 0.62 },
+    ];
+    for (const step of printSteps) {
+      const cv = makePrintFriendlyCopy(mosaicCanvas, step.gamma);
+      folder.file(
+        `MOSAICO_${name}_${date}_PARA_IMPRIMIR_${step.label}.jpg`,
+        canvasToTaggedJpegBase64(cv, .97),
+        { base64: true }
+      );
+    }
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
